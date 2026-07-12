@@ -1,0 +1,6 @@
+# Copy this file to /etc/udev/rules.d/99-ytipod.rules and adjust:
+# - idVendor/idProduct from: lsusb
+# - USERNAME
+# - /path/to/ytipod
+# - the iPod mount path through YTIPOD_IPOD_VIDEO_DIR in your .env
+ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="05ac", ATTR{idProduct}=="XXXX", RUN+="/usr/bin/systemd-run --user --machine=USERNAME@ /path/to/ytipod/venv/bin/python /path/to/ytipod/src/main.py sync-ipod"

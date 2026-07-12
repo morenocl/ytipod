@@ -1,0 +1,36 @@
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Local deploy files with machine-specific paths
+deploy/systemd/*.service
+deploy/systemd/*.timer
+deploy/udev/*.rules
+!deploy/systemd/*.example
+!deploy/udev/*.example
+
+# Runtime data
+*.db
+*.sqlite
+*.sqlite3
+logs/
+downloads/
+src/downloads/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+venv/
+.venv/
+
+# OS/editor files
+.DS_Store
+.idea/
+.vscode/
