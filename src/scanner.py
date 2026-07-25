@@ -38,7 +38,15 @@ def scan_youtube_playlist(playlist):
 
     matched = 0
     downloaded = 0
+    owner = _safe_dirname(
+        info.get("uploader")
+        or info.get("uploader_id")
+        or info.get("channel")
+        or info.get("channel_id")
+        or "YouTube"
+    )
     playlist_dir = _safe_dirname(playlist_title)
+    folder_path = f"{owner}/{playlist_dir}"
 
     for video in info.get("entries", []) if info else []:
         if not video:
@@ -56,7 +64,7 @@ def scan_youtube_playlist(playlist):
             continue
 
         logger.info('Descargando desde playlist %s: "%s"', playlist_title, title)
-        filename = downloader.download_video(playlist_dir, f"https://www.youtube.com/watch?v={youtube_id}")
+        filename = downloader.download_video(folder_path, f"https://www.youtube.com/watch?v={youtube_id}", include_uploader_folder=False)
         database.register(
             video_id=youtube_id,
             channel=playlist_title,

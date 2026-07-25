@@ -88,7 +88,7 @@ def _convert_to_ipod_mpeg(source_file):
     height = config.IPOD_VIDEO_HEIGHT
     vf = (
         f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
-        f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps={config.IPOD_VIDEO_FPS}"
+        f"setsar=1,fps={config.IPOD_VIDEO_FPS}"
     )
 
     cmd = [
@@ -131,10 +131,14 @@ def _convert_to_ipod_mpeg(source_file):
     return target
 
 
-def download_video(channel_dir, url):
-    dirpath = DOWNLOAD_DIR / channel_dir
+def download_video(folder_path, url, include_uploader_folder=True):
+    dirpath = DOWNLOAD_DIR / Path(folder_path)
     dirpath.mkdir(parents=True, exist_ok=True)
-    source, info = _download_with_template(url, dirpath / "%(uploader)s" / "%(title)s [%(id)s].%(ext)s")
+    if include_uploader_folder:
+        outtmpl = dirpath / "%(uploader)s" / "%(title)s [%(id)s].%(ext)s"
+    else:
+        outtmpl = dirpath / "%(title)s [%(id)s].%(ext)s"
+    source, info = _download_with_template(url, outtmpl)
     source = _add_ipod_sort_prefix(source, info)
     return _convert_to_ipod_mpeg(source)
 
