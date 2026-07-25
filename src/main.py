@@ -5,6 +5,7 @@ import database
 import downloader
 import scanner
 import sync_ipod
+import web_admin
 from logging_config import setup_logging
 
 logger = logging.getLogger(__name__)
@@ -55,6 +56,10 @@ def cmd_sync_ipod(_args):
     logger.info("Videos sincronizados: %s", copied)
 
 
+def cmd_web_admin(args):
+    web_admin.run(host=args.host, port=args.port)
+
+
 def build_parser():
     parser = argparse.ArgumentParser(description="Descarga videos de YouTube y los deja listos para iPod.")
     sub = parser.add_subparsers(required=True)
@@ -79,6 +84,11 @@ def build_parser():
 
     sync = sub.add_parser("sync-ipod")
     sync.set_defaults(func=cmd_sync_ipod)
+
+    web = sub.add_parser("web-admin")
+    web.add_argument("--host", default=None, help="Host de escucha, por defecto YTIPOD_WEB_HOST o 127.0.0.1")
+    web.add_argument("--port", type=int, default=None, help="Puerto, por defecto YTIPOD_WEB_PORT o 8080")
+    web.set_defaults(func=cmd_web_admin)
 
     return parser
 

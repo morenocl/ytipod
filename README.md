@@ -72,6 +72,23 @@ Comandos del bot:
 
 Los links de YouTube solo se procesan si llegan precedidos por `/yt`.
 
+## Admin web
+
+Levanta una interfaz visual para editar las tablas SQLite `channels` y `downloads`:
+
+```bash
+venv/bin/python src/main.py web-admin
+```
+
+Por defecto escucha en `http://127.0.0.1:8080`. Para exponerlo a otra maquina, configura usuario/password en `.env` y cambia el host:
+
+```bash
+YTIPOD_WEB_HOST=0.0.0.0
+YTIPOD_WEB_PORT=8080
+YTIPOD_WEB_USERNAME=admin
+YTIPOD_WEB_PASSWORD=<CHANGE_ME>
+```
+
 ## Automatizacion diaria a las 3am
 
 Copia `deploy/systemd/ytipod-scan.service.example` y `deploy/systemd/ytipod-scan.timer.example` a `~/.config/systemd/user/`, ajusta las rutas si hace falta y ejecuta:
