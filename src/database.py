@@ -17,11 +17,11 @@ def initialize():
     with connect() as conn:
         conn.execute(
             """
-            CREATE TABLE IF NOT EXISTS channels(
+            CREATE TABLE IF NOT EXISTS youtube_playlists(
                 id INTEGER PRIMARY KEY,
-                channel TEXT NOT NULL,
-                title_substring TEXT NOT NULL,
-                UNIQUE(channel, title_substring)
+                playlist_url TEXT NOT NULL UNIQUE,
+                playlist_title TEXT,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
             """
         )
@@ -98,32 +98,6 @@ def _migrate_podcasts(conn):
     for column, sql in migrations.items():
         if column not in columns:
             conn.execute(sql)
-
-
-def add_channel(channel, title_substring):
-    initialize()
-    with connect() as conn:
-        conn.execute(
-            """
-            INSERT OR IGNORE INTO channels(channel, title_substring)
-            VALUES(?, ?)
-            """,
-            (channel.strip().lstrip("@"), title_substring.strip()),
-        )
-        conn.commit()
-
-
-def get_channels():
-    initialize()
-    with connect() as conn:
-        rows = conn.execute(
-            """
-            SELECT channel, title_substring
-            FROM channels
-            ORDER BY channel, title_substring
-            """
-        ).fetchall()
-    return [(row["channel"], row["title_substring"]) for row in rows]
 
 
 def already_downloaded(video_id):
@@ -264,5 +238,42 @@ def mark_podcast_synced(download_id):
             WHERE id = ?
             """,
             (download_id,),
+        )
+        conn.commit()
+
+
+def add_youtube_playlist(playlist_url, playlist_title=None):
+    initialize()
+    with connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO youtube_playlists(playlist_url, playlist_title)
+            VALUES(?, ?)
+            ON CONFLICT(playlist_url) DO UPDATE SET
+                playlist_title = excluded.playlist_title
+            """,
+            (playlist_url.strip(), (playlist_title or "").strip() or None),
+        )
+        conn.commit()
+
+
+def get_youtube_playlists():
+    initialize()
+    with connect() as conn:
+        return conn.execute(
+            """
+            SELECT id, playlist_url, playlist_title
+            FROM youtube_playlists
+            ORDER BY playlist_title, playlist_url
+            """
+        ).fetchall()
+
+
+def update_youtube_playlist_title(playlist_id, playlist_title):
+    initialize()
+    with connect() as conn:
+        conn.execute(
+            "UPDATE youtube_playlists SET playlist_title = ? WHERE id = ?",
+            ((playlist_title or "").strip() or None, playlist_id),
         )
         conn.commit()

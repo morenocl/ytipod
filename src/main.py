@@ -17,19 +17,18 @@ def cmd_init_db(_args):
     logger.info("Base inicializada: %s", database.DB)
 
 
-def cmd_add_channel(args):
-    database.add_channel(args.channel, args.substring)
-    logger.info("Filtro agregado: @%s -> %s", args.channel.lstrip("@"), args.substring)
+def cmd_add_youtube_playlist(args):
+    database.add_youtube_playlist(args.playlist_url, args.title)
+    logger.info("Playlist YouTube agregada: %s", args.title or args.playlist_url)
 
 
-def cmd_list_channels(_args):
-    database.initialize()
-    channels = database.get_channels()
-    if not channels:
-        logger.info("No hay filtros configurados")
+def cmd_list_youtube_playlists(_args):
+    rows = database.get_youtube_playlists()
+    if not rows:
+        logger.info("No hay playlists de YouTube configuradas")
         return
-    for channel, substring in channels:
-        logger.info("@%s: %s", channel, substring)
+    for row in rows:
+        logger.info("%s | %s", row["playlist_title"] or "sin titulo", row["playlist_url"])
 
 
 def cmd_add_podcast(args):
@@ -87,13 +86,13 @@ def build_parser():
     init_db = sub.add_parser("init-db")
     init_db.set_defaults(func=cmd_init_db)
 
-    add = sub.add_parser("add-channel")
-    add.add_argument("channel", help="Nombre del canal sin @, por ejemplo galiamoldavsky")
-    add.add_argument("substring", help="Texto que debe aparecer en el titulo")
-    add.set_defaults(func=cmd_add_channel)
+    add_playlist = sub.add_parser("add-youtube-playlist")
+    add_playlist.add_argument("playlist_url", help="URL de la playlist de YouTube")
+    add_playlist.add_argument("--title", default=None, help="Titulo opcional; si se omite se completa al escanear")
+    add_playlist.set_defaults(func=cmd_add_youtube_playlist)
 
-    list_channels = sub.add_parser("list-channels")
-    list_channels.set_defaults(func=cmd_list_channels)
+    list_playlists = sub.add_parser("list-youtube-playlists")
+    list_playlists.set_defaults(func=cmd_list_youtube_playlists)
 
     add_podcast = sub.add_parser("add-podcast")
     add_podcast.add_argument("spotify_url", help="URL del show en Spotify")

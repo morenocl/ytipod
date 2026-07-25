@@ -11,12 +11,12 @@ import database
 logger = logging.getLogger(__name__)
 
 TABLES = {
-    "channels": {
-        "label": "Filtros de canales",
-        "columns": ["id", "channel", "title_substring"],
-        "editable": ["channel", "title_substring"],
-        "required": ["channel", "title_substring"],
-        "order": "channel, title_substring",
+    "youtube_playlists": {
+        "label": "Playlists de YouTube",
+        "columns": ["id", "playlist_url", "playlist_title", "created_at"],
+        "editable": ["playlist_url", "playlist_title"],
+        "required": ["playlist_url"],
+        "order": "playlist_title, playlist_url",
     },
     "downloads": {
         "label": "Videos descargados",
@@ -70,7 +70,7 @@ def _normalize_value(column, values):
     value = values.get(column, [""])[0].strip()
     if column == "synced_to_ipod":
         return 1 if value in {"1", "true", "on", "yes"} else 0
-    if value == "" and column in {"synced_at", "published_at", "feed_url"}:
+    if value == "" and column in {"synced_at", "published_at", "feed_url", "playlist_title"}:
         return None
     return value
 
@@ -199,7 +199,7 @@ class AdminHandler(BaseHTTPRequestHandler):
         database.initialize()
         parsed = urlparse(self.path)
         params = parse_qs(parsed.query)
-        table = params.get("table", ["channels"])[0]
+        table = params.get("table", ["youtube_playlists"])[0]
         if table not in TABLES:
             self.send_error(HTTPStatus.NOT_FOUND)
             return
@@ -289,7 +289,7 @@ class AdminHandler(BaseHTTPRequestHandler):
         for column in meta["editable"]:
             value = row[column] if row else ""
             required = " required" if column in meta["required"] else ""
-            if column in {"title", "filename", "spotify_url", "feed_url", "episode_title"}:
+            if column in {"title", "filename", "spotify_url", "feed_url", "episode_title", "playlist_url"}:
                 control = f'<textarea name="{_esc(column)}"{required}>{_esc(value)}</textarea>'
             elif column == "synced_to_ipod":
                 selected_0 = " selected" if str(value or "0") == "0" else ""

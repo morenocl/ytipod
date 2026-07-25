@@ -1,6 +1,6 @@
 # ytipod
 
-Servidor Python para descargar videos de YouTube por filtros de canal/titulo, convertirlos a MPEG para Rockbox/iPod, registrar descargas en SQLite y copiarlas al iPod cuando este montado.
+Servidor Python para descargar videos de playlists de YouTube, convertirlos a MPEG para Rockbox/iPod, registrar descargas en SQLite y copiarlas al iPod cuando este montado.
 
 ## Configuracion
 
@@ -33,14 +33,14 @@ Los videos destinados al iPod se guardan como `.mpg` con prefijo `YYMMDD-` segun
 
 ## Uso
 
-Agregar filtros:
+Agregar playlists de YouTube:
 
 ```bash
-venv/bin/python src/main.py add-channel ytusername "Texto en el Titulo"
-venv/bin/python src/main.py list-channels
+venv/bin/python src/main.py add-youtube-playlist 'https://www.youtube.com/playlist?list=PLAYLIST_ID' --title 'Nombre opcional'
+venv/bin/python src/main.py list-youtube-playlists
 ```
 
-Escanear y descargar coincidencias:
+Escanear y descargar videos nuevos de playlists y podcasts:
 
 ```bash
 venv/bin/python src/main.py scan

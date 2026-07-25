@@ -10,9 +10,12 @@ from logging_config import setup_logging
 logger = logging.getLogger(__name__)
 
 
-def list_streams(channel):
-    channel = channel.strip().lstrip("@")
-    url = f"https://www.youtube.com/@{channel}/streams"
+def _safe_dirname(value):
+    cleaned = "".join(char for char in value if char not in "<>:\\|?*").strip()
+    return cleaned[:120] or "YouTube Playlist"
+
+
+def list_playlist(playlist_url):
     options = {
         "extract_flat": True,
         "skip_download": True,
@@ -21,53 +24,57 @@ def list_streams(channel):
     }
 
     with YoutubeDL(options) as ydl:
-        info = ydl.extract_info(url, download=False)
+        info = ydl.extract_info(playlist_url, download=False)
 
-    return info.get("entries", []) if info else []
+    return info or {}
 
 
-def scan_channel(channel, substring):
+def scan_youtube_playlist(playlist):
+    playlist_url = playlist["playlist_url"]
+    info = list_playlist(playlist_url)
+    playlist_title = info.get("title") or playlist["playlist_title"] or "YouTube Playlist"
+    if playlist["playlist_title"] != playlist_title:
+        database.update_youtube_playlist_title(playlist["id"], playlist_title)
+
     matched = 0
     downloaded = 0
+    playlist_dir = _safe_dirname(playlist_title)
 
-    for video in list_streams(channel):
+    for video in info.get("entries", []) if info else []:
         if not video:
             continue
 
-        title = video.get("title", "")
-        if substring.lower() not in title.lower():
+        youtube_id = video.get("id")
+        title = video.get("title") or youtube_id or "video"
+        if not youtube_id:
+            logger.warning("Video sin id en playlist %s: %s", playlist_title, title)
             continue
 
         matched += 1
-        youtube_id = video.get("id")
-        if not youtube_id:
-            logger.warning("Video sin id en @%s: %s", channel, title)
-            continue
-
         if database.already_downloaded(youtube_id):
             logger.info('Ya registrado: "%s"', title)
             continue
 
-        logger.info('Descargando: "%s"', title)
-        filename = downloader.download_video(channel, f"https://www.youtube.com/watch?v={youtube_id}")
+        logger.info('Descargando desde playlist %s: "%s"', playlist_title, title)
+        filename = downloader.download_video(playlist_dir, f"https://www.youtube.com/watch?v={youtube_id}")
         database.register(
             video_id=youtube_id,
-            channel=channel,
+            channel=playlist_title,
             title=title,
             filename=filename,
         )
         logger.info("Registrado: %s", filename)
         downloaded += 1
 
-    return {"channel": channel, "substring": substring, "matched": matched, "downloaded": downloaded}
+    return {"playlist": playlist_title, "matched": matched, "downloaded": downloaded}
 
 
 def scan_all():
     database.initialize()
     results = []
-    for channel, substring in database.get_channels():
-        logger.info("Escaneando @%s: %s", channel, substring)
-        results.append(scan_channel(channel, substring))
+    for playlist in database.get_youtube_playlists():
+        logger.info("Escaneando playlist YouTube: %s", playlist["playlist_title"] or playlist["playlist_url"])
+        results.append(scan_youtube_playlist(playlist))
 
     podcast_results = podcast_downloader.scan_all()
     for result in podcast_results:
@@ -85,8 +92,8 @@ def main(configure_logging=True):
         setup_logging("scan")
     for result in scan_all():
         logger.info(
-            "@%s | coincidencias: %s | descargados: %s",
-            result["channel"],
+            "Playlist %s | videos: %s | descargados: %s",
+            result["playlist"],
             result["matched"],
             result["downloaded"],
         )
