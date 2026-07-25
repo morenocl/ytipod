@@ -50,7 +50,33 @@ def _download_with_template(url, outtmpl):
         if filename.suffix != ".mp4":
             filename = filename.with_suffix(".mp4")
 
-    return filename
+    return filename, info
+
+
+def _upload_date_prefix(info):
+    upload_date = str(info.get("upload_date") or "")
+    if len(upload_date) == 8 and upload_date.isdigit():
+        return upload_date[2:]
+
+    timestamp = info.get("timestamp") or info.get("release_timestamp")
+    if timestamp:
+        from datetime import datetime
+
+        return datetime.fromtimestamp(timestamp).strftime("%y%m%d")
+
+    video_id = str(info.get("id") or "video")
+    return video_id[:6].rjust(6, "0")
+
+
+def _add_ipod_sort_prefix(source_file, info):
+    source = Path(source_file)
+    prefix = _upload_date_prefix(info)
+    if source.name.startswith(f"{prefix}-"):
+        return source
+
+    target = source.with_name(f"{prefix}-{source.name}")
+    source.replace(target)
+    return target
 
 
 def _convert_to_ipod_mpeg(source_file):
@@ -108,14 +134,16 @@ def _convert_to_ipod_mpeg(source_file):
 def download_video(channel_dir, url):
     dirpath = DOWNLOAD_DIR / channel_dir
     dirpath.mkdir(parents=True, exist_ok=True)
-    source = _download_with_template(url, dirpath / "%(uploader)s" / "%(title)s [%(id)s].%(ext)s")
+    source, info = _download_with_template(url, dirpath / "%(uploader)s" / "%(title)s [%(id)s].%(ext)s")
+    source = _add_ipod_sort_prefix(source, info)
     return _convert_to_ipod_mpeg(source)
 
 
 def download_video_to_dir(url, target_dir):
     target = Path(target_dir)
     target.mkdir(parents=True, exist_ok=True)
-    return _download_with_template(url, target / "%(title)s [%(id)s].%(ext)s")
+    filename, _info = _download_with_template(url, target / "%(title)s [%(id)s].%(ext)s")
+    return filename
 
 
 def get_video_info(url):

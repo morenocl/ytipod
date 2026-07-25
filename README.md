@@ -29,6 +29,8 @@ export YTIPOD_TELEGRAM_ALLOWED_CHAT_ID=<TELEGRAM_CHAT_ID>
 
 Cada ejecucion crea un log nuevo en `logs/` con fecha y hora en el nombre, por ejemplo `scan_20260712_030000.log`.
 
+Los videos destinados al iPod se guardan como `.mpg` con prefijo `YYMMDD-` segun la fecha de subida a YouTube, por ejemplo `240102-Titulo [id].mpg`, para conservar el orden al copiar al dispositivo.
+
 ## Uso
 
 Agregar filtros:
