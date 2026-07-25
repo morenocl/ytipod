@@ -41,6 +41,17 @@ def initialize():
         )
         conn.execute(
             """
+            CREATE TABLE IF NOT EXISTS epub_downloads(
+                id INTEGER PRIMARY KEY,
+                source_url TEXT NOT NULL,
+                title TEXT,
+                filename TEXT NOT NULL,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS podcast_subscriptions(
                 id INTEGER PRIMARY KEY,
                 spotify_url TEXT NOT NULL UNIQUE,
@@ -277,3 +288,28 @@ def update_youtube_playlist_title(playlist_id, playlist_title):
             ((playlist_title or "").strip() or None, playlist_id),
         )
         conn.commit()
+
+
+def register_epub_download(source_url, filename, title=None):
+    initialize()
+    with connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO epub_downloads(source_url, title, filename)
+            VALUES(?, ?, ?)
+            """,
+            (source_url.strip(), (title or "").strip() or None, str(filename)),
+        )
+        conn.commit()
+
+
+def get_epub_downloads():
+    initialize()
+    with connect() as conn:
+        return conn.execute(
+            """
+            SELECT id, source_url, title, filename, created_at
+            FROM epub_downloads
+            ORDER BY created_at DESC, id DESC
+            """
+        ).fetchall()

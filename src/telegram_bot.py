@@ -139,11 +139,12 @@ def _handle_epub(chat_id, text):
         _send(chat_id, "Uso: /epub <link de articulo>")
         return
 
-    target_dir = Path(config.TEMP_DIR) / "epub"
+    target_dir = Path(config.EPUB_DIR)
     logger.info("Generando EPUB desde URL: %s", url)
     _send(chat_id, "Generando EPUB...")
     filename, title = epub_builder.article_to_epub(url, target_dir)
-    logger.info("Enviando EPUB: %s", filename)
+    database.register_epub_download(url, filename, title)
+    logger.info("EPUB registrado y guardado: %s", filename)
     _send_document(chat_id, filename, caption=title)
 
 
@@ -179,6 +180,7 @@ def run_polling():
     setup_logging("telegram_bot")
     database.initialize()
     Path(config.TEMP_DIR).mkdir(parents=True, exist_ok=True)
+    Path(config.EPUB_DIR).mkdir(parents=True, exist_ok=True)
     offset = None
     logger.info("Bot de Telegram iniciado")
     while True:

@@ -72,6 +72,8 @@ Comandos del bot:
 /epub <link de articulo>    Extrae el texto, genera un EPUB y lo envia por Telegram.
 ```
 
+Los EPUBs generados por `/epub` se conservan en `YTIPOD_DOWNLOAD_DIR/epubs/` y se registran en la tabla `epub_downloads` con fecha, URL original y path del archivo.
+
 Los links de YouTube solo se procesan si llegan precedidos por `/yt`.
 
 ## Podcasts
@@ -92,7 +94,7 @@ venv/bin/python src/main.py scan-podcasts
 El scan nocturno (`venv/bin/python src/main.py scan`) tambien chequea podcasts. Los episodios quedan en:
 
 ```text
-downloads/Autora/Podcast/YYMMDD-Titulo.mp3
+YTIPOD_DOWNLOAD_DIR/Autora/Podcast/YYMMDD-Titulo.mp3
 ```
 
 Spotify no expone una descarga completa de episodios desde la URL `open.spotify.com/show/...`; por eso `feed_url` es necesario para descargar contenido. Si una suscripcion no tiene RSS, queda registrada pero el scan la omite con un warning.
