@@ -74,6 +74,29 @@ Comandos del bot:
 
 Los links de YouTube solo se procesan si llegan precedidos por `/yt`.
 
+## Podcasts
+
+Puedes programar podcasts guardando la URL de Spotify como referencia junto con autora, nombre del podcast y el RSS desde donde se descargan los episodios completos:
+
+```bash
+venv/bin/python src/main.py add-podcast \
+  'https://open.spotify.com/show/SPOTIFY_SHOW_ID' \
+  'Nombre Autora' \
+  'Nombre del podcast' \
+  --feed-url 'https://example.com/podcast/rss'
+
+venv/bin/python src/main.py list-podcasts
+venv/bin/python src/main.py scan-podcasts
+```
+
+El scan nocturno (`venv/bin/python src/main.py scan`) tambien chequea podcasts. Los episodios quedan en:
+
+```text
+downloads/Autora/Podcast/YYMMDD-Titulo.mp3
+```
+
+Spotify no expone una descarga completa de episodios desde la URL `open.spotify.com/show/...`; por eso `feed_url` es necesario para descargar contenido. Si una suscripcion no tiene RSS, queda registrada pero el scan la omite con un warning.
+
 ## Admin web
 
 Levanta una interfaz visual para editar las tablas SQLite `channels` y `downloads`:

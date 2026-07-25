@@ -4,6 +4,7 @@ from yt_dlp import YoutubeDL
 
 import database
 import downloader
+import podcast_downloader
 from logging_config import setup_logging
 
 logger = logging.getLogger(__name__)
@@ -67,6 +68,15 @@ def scan_all():
     for channel, substring in database.get_channels():
         logger.info("Escaneando @%s: %s", channel, substring)
         results.append(scan_channel(channel, substring))
+
+    podcast_results = podcast_downloader.scan_all()
+    for result in podcast_results:
+        logger.info(
+            "Podcast %s | episodios: %s | descargados: %s",
+            result["podcast"],
+            result["matched"],
+            result["downloaded"],
+        )
     return results
 
 

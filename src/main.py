@@ -3,6 +3,7 @@ import logging
 
 import database
 import downloader
+import podcast_downloader
 import scanner
 import sync_ipod
 import web_admin
@@ -29,6 +30,25 @@ def cmd_list_channels(_args):
         return
     for channel, substring in channels:
         logger.info("@%s: %s", channel, substring)
+
+
+def cmd_add_podcast(args):
+    database.add_podcast_subscription(args.spotify_url, args.author, args.title, args.feed_url)
+    logger.info("Podcast agregado: %s - %s", args.author, args.title)
+
+
+def cmd_list_podcasts(_args):
+    rows = database.get_podcast_subscriptions()
+    if not rows:
+        logger.info("No hay podcasts configurados")
+        return
+    for row in rows:
+        logger.info("%s - %s | Spotify: %s | RSS: %s", row["author"], row["podcast_title"], row["spotify_url"], row["feed_url"] or "sin RSS")
+
+
+def cmd_scan_podcasts(_args):
+    for result in podcast_downloader.scan_all():
+        logger.info("Podcast %s | episodios: %s | descargados: %s", result["podcast"], result["matched"], result["downloaded"])
 
 
 def cmd_scan(_args):
@@ -74,6 +94,19 @@ def build_parser():
 
     list_channels = sub.add_parser("list-channels")
     list_channels.set_defaults(func=cmd_list_channels)
+
+    add_podcast = sub.add_parser("add-podcast")
+    add_podcast.add_argument("spotify_url", help="URL del show en Spotify")
+    add_podcast.add_argument("author", help="Autora o autor del podcast")
+    add_podcast.add_argument("title", help="Nombre del podcast")
+    add_podcast.add_argument("--feed-url", default=None, help="RSS del podcast. Necesario para descargar episodios completos")
+    add_podcast.set_defaults(func=cmd_add_podcast)
+
+    list_podcasts = sub.add_parser("list-podcasts")
+    list_podcasts.set_defaults(func=cmd_list_podcasts)
+
+    scan_podcasts = sub.add_parser("scan-podcasts")
+    scan_podcasts.set_defaults(func=cmd_scan_podcasts)
 
     scan = sub.add_parser("scan")
     scan.set_defaults(func=cmd_scan)

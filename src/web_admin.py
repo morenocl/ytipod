@@ -25,6 +25,20 @@ TABLES = {
         "required": ["youtube_id", "channel", "title", "filename"],
         "order": "downloaded_at DESC, id DESC",
     },
+    "podcast_subscriptions": {
+        "label": "Podcasts",
+        "columns": ["id", "spotify_url", "author", "podcast_title", "feed_url", "created_at"],
+        "editable": ["spotify_url", "author", "podcast_title", "feed_url"],
+        "required": ["spotify_url", "author", "podcast_title"],
+        "order": "author, podcast_title",
+    },
+    "podcast_downloads": {
+        "label": "Episodios descargados",
+        "columns": ["id", "episode_id", "spotify_url", "author", "podcast_title", "episode_title", "filename", "published_at", "downloaded_at", "synced_to_ipod", "synced_at"],
+        "editable": ["episode_id", "spotify_url", "author", "podcast_title", "episode_title", "filename", "published_at", "synced_to_ipod", "synced_at"],
+        "required": ["episode_id", "spotify_url", "author", "podcast_title", "episode_title", "filename"],
+        "order": "downloaded_at DESC, id DESC",
+    },
 }
 
 
@@ -56,7 +70,7 @@ def _normalize_value(column, values):
     value = values.get(column, [""])[0].strip()
     if column == "synced_to_ipod":
         return 1 if value in {"1", "true", "on", "yes"} else 0
-    if value == "" and column == "synced_at":
+    if value == "" and column in {"synced_at", "published_at", "feed_url"}:
         return None
     return value
 
@@ -275,7 +289,7 @@ class AdminHandler(BaseHTTPRequestHandler):
         for column in meta["editable"]:
             value = row[column] if row else ""
             required = " required" if column in meta["required"] else ""
-            if column in {"title", "filename"}:
+            if column in {"title", "filename", "spotify_url", "feed_url", "episode_title"}:
                 control = f'<textarea name="{_esc(column)}"{required}>{_esc(value)}</textarea>'
             elif column == "synced_to_ipod":
                 selected_0 = " selected" if str(value or "0") == "0" else ""

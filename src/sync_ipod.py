@@ -31,6 +31,18 @@ def sync_pending(ipod_video_dir=None):
         copied += 1
         logger.info("Copiado al iPod: %s", target)
 
+    for row in database.pending_sync_podcast_downloads():
+        source = Path(row["filename"])
+        if not source.exists():
+            logger.warning("Archivo de podcast no encontrado, queda pendiente: %s", source)
+            continue
+
+        target = destination / source.name
+        shutil.copy2(source, target)
+        database.mark_podcast_synced(row["id"])
+        copied += 1
+        logger.info("Podcast copiado al iPod: %s", target)
+
     return copied
 
 
