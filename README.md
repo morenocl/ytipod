@@ -16,6 +16,7 @@ Variables utiles:
 export YTIPOD_DATABASE=ytipod/ytipod.db
 export YTIPOD_DOWNLOAD_DIR=ytipod/downloads
 export YTIPOD_LOG_DIR=ytipod/logs
+export YTIPOD_TEMP_DIR=ytipod/tmp
 export YTIPOD_IPOD_VIDEO_DIR=/media/ipod/Videos
 export YTIPOD_TELEGRAM_TOKEN=<TELEGRAM_BOT_TOKEN>
 export YTIPOD_TELEGRAM_ALLOWED_CHAT_ID=<TELEGRAM_CHAT_ID>
@@ -28,7 +29,7 @@ Cada ejecucion crea un log nuevo en `logs/` con fecha y hora en el nombre, por e
 Agregar filtros:
 
 ```bash
-venv/bin/python src/main.py add-channel youtuberusername "Texto en el Titulo"
+venv/bin/python src/main.py add-channel ytusername "Texto en el Titulo"
 venv/bin/python src/main.py list-channels
 ```
 
@@ -55,6 +56,16 @@ Bot de Telegram:
 ```bash
 YTIPOD_TELEGRAM_TOKEN=... venv/bin/python src/telegram_bot.py
 ```
+
+Comandos del bot:
+
+```text
+/yt <link de YouTube>       Descarga el video y lo deja listo para sincronizar con el iPod.
+/tw <link con video>        Descarga el video y lo envia como archivo por Telegram.
+/epub <link de articulo>    Extrae el texto, genera un EPUB y lo envia por Telegram.
+```
+
+Los links de YouTube solo se procesan si llegan precedidos por `/yt`.
 
 ## Automatizacion diaria a las 3am
 

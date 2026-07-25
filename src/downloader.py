@@ -27,13 +27,15 @@ def youtube_id_from_url(url):
     return None
 
 
-def download_video(channel_dir, url):
-    dirpath = DOWNLOAD_DIR / channel_dir
-    dirpath.mkdir(parents=True, exist_ok=True)
+def is_youtube_url(url):
+    parsed = urlparse(url)
+    return bool(parsed.hostname and ("youtube.com" in parsed.hostname or "youtu.be" in parsed.hostname))
 
+
+def _download_with_template(url, outtmpl):
     options = {
         **YDL_OPTIONS,
-        "outtmpl": str(dirpath / "%(uploader)s" / "%(title)s [%(id)s].%(ext)s"),
+        "outtmpl": str(outtmpl),
     }
 
     with yt_dlp.YoutubeDL(options) as ydl:
@@ -45,6 +47,18 @@ def download_video(channel_dir, url):
             filename = filename.with_suffix(".mp4")
 
     return filename
+
+
+def download_video(channel_dir, url):
+    dirpath = DOWNLOAD_DIR / channel_dir
+    dirpath.mkdir(parents=True, exist_ok=True)
+    return _download_with_template(url, dirpath / "%(uploader)s" / "%(title)s [%(id)s].%(ext)s")
+
+
+def download_video_to_dir(url, target_dir):
+    target = Path(target_dir)
+    target.mkdir(parents=True, exist_ok=True)
+    return _download_with_template(url, target / "%(title)s [%(id)s].%(ext)s")
 
 
 def get_video_info(url):

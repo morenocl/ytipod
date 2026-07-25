@@ -1,18 +1,21 @@
 import json
 import logging
+import mimetypes
 import time
+from pathlib import Path
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
-from urllib.request import urlopen
+from urllib.parse import urlencode, urlparse
+from urllib.request import Request, urlopen
 
 import config
 import database
 import downloader
+import epub_builder
 from logging_config import setup_logging
 
 logger = logging.getLogger(__name__)
 
-YOUTUBE_MARKERS = ("youtube.com/watch", "youtu.be/", "youtube.com/shorts/")
+COMMANDS = {"/yt", "/tw", "/epub"}
 
 
 def _api(method, params=None):
@@ -25,8 +28,48 @@ def _api(method, params=None):
         return json.loads(response.read().decode("utf-8"))
 
 
+def _api_multipart(method, fields, file_field, file_path):
+    if not config.TELEGRAM_TOKEN:
+        raise RuntimeError("Falta YTIPOD_TELEGRAM_TOKEN")
+
+    boundary = "----ytipodtelegramboundary"
+    path = Path(file_path)
+    mime_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+    body = bytearray()
+
+    for name, value in fields.items():
+        body.extend(f"--{boundary}\r\n".encode())
+        body.extend(f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode())
+        body.extend(str(value).encode())
+        body.extend(b"\r\n")
+
+    body.extend(f"--{boundary}\r\n".encode())
+    body.extend(
+        f'Content-Disposition: form-data; name="{file_field}"; filename="{path.name}"\r\n'.encode()
+    )
+    body.extend(f"Content-Type: {mime_type}\r\n\r\n".encode())
+    body.extend(path.read_bytes())
+    body.extend(b"\r\n")
+    body.extend(f"--{boundary}--\r\n".encode())
+
+    request = Request(
+        f"https://api.telegram.org/bot{config.TELEGRAM_TOKEN}/{method}",
+        data=bytes(body),
+        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+    )
+    with urlopen(request, timeout=300) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
 def _send(chat_id, text):
     _api("sendMessage", {"chat_id": chat_id, "text": text})
+
+
+def _send_document(chat_id, file_path, caption=None):
+    fields = {"chat_id": chat_id}
+    if caption:
+        fields["caption"] = caption
+    _api_multipart("sendDocument", fields, "document", file_path)
 
 
 def _allowed(chat_id):
@@ -36,9 +79,72 @@ def _allowed(chat_id):
 
 def _extract_url(text):
     for part in text.split():
-        if any(marker in part for marker in YOUTUBE_MARKERS):
+        parsed = urlparse(part.strip())
+        if parsed.scheme in {"http", "https"} and parsed.netloc:
             return part.strip()
     return None
+
+
+def _parse_command(text):
+    parts = text.strip().split(maxsplit=1)
+    if not parts:
+        return None, ""
+    command = parts[0].split("@", 1)[0].lower()
+    if command not in COMMANDS:
+        return None, text
+    return command, parts[1] if len(parts) > 1 else ""
+
+
+def _handle_youtube(chat_id, text):
+    url = _extract_url(text)
+    if not url or not downloader.is_youtube_url(url):
+        _send(chat_id, "Uso: /yt <link de YouTube>")
+        return
+
+    info = downloader.get_video_info(url)
+    youtube_id = info.get("id") or downloader.youtube_id_from_url(url)
+    title = info.get("title", youtube_id or "video")
+    channel = info.get("uploader") or info.get("channel") or "telegram"
+
+    if youtube_id and database.already_downloaded(youtube_id):
+        logger.info("Ya estaba descargado desde Telegram: %s", title)
+        _send(chat_id, f"Ya estaba descargado: {title}")
+        return
+
+    logger.info("Descargando YouTube desde Telegram: %s", title)
+    _send(chat_id, f"Descargando para el iPod: {title}")
+    filename = downloader.download_video("telegram", url)
+    database.register(youtube_id or filename.stem, title, channel, filename)
+    logger.info("Listo para sincronizar: %s", filename)
+    _send(chat_id, f"Listo para sincronizar con el iPod: {title}")
+
+
+def _handle_twitter_video(chat_id, text):
+    url = _extract_url(text)
+    if not url:
+        _send(chat_id, "Uso: /tw <link con video>")
+        return
+
+    target_dir = Path(config.TEMP_DIR) / "telegram_tw"
+    logger.info("Descargando video para enviar por Telegram: %s", url)
+    _send(chat_id, "Descargando video...")
+    filename = downloader.download_video_to_dir(url, target_dir)
+    logger.info("Enviando video por Telegram: %s", filename)
+    _send_document(chat_id, filename, caption=filename.stem)
+
+
+def _handle_epub(chat_id, text):
+    url = _extract_url(text)
+    if not url:
+        _send(chat_id, "Uso: /epub <link de articulo>")
+        return
+
+    target_dir = Path(config.TEMP_DIR) / "epub"
+    logger.info("Generando EPUB desde URL: %s", url)
+    _send(chat_id, "Generando EPUB...")
+    filename, title = epub_builder.article_to_epub(url, target_dir)
+    logger.info("Enviando EPUB: %s", filename)
+    _send_document(chat_id, filename, caption=title)
 
 
 def handle_message(message):
@@ -49,37 +155,30 @@ def handle_message(message):
         logger.warning("Mensaje ignorado de chat no autorizado: %s", chat_id)
         return
 
-    url = _extract_url(text)
-    if not url:
-        logger.info("Mensaje sin link de YouTube recibido de chat %s", chat_id)
-        _send(chat_id, "Enviame un link de YouTube.")
+    command, payload = _parse_command(text)
+    if not command:
+        if _extract_url(text):
+            _send(chat_id, "Usa /yt para YouTube, /tw para videos de Twitter/X o /epub para articulos.")
+        else:
+            _send(chat_id, "Comandos disponibles: /yt, /tw, /epub")
         return
 
     try:
-        info = downloader.get_video_info(url)
-        youtube_id = info.get("id") or downloader.youtube_id_from_url(url)
-        title = info.get("title", youtube_id or "video")
-        channel = info.get("uploader") or info.get("channel") or "telegram"
-
-        if youtube_id and database.already_downloaded(youtube_id):
-            logger.info("Ya estaba descargado desde Telegram: %s", title)
-            _send(chat_id, f"Ya estaba descargado: {title}")
-            return
-
-        logger.info("Descargando desde Telegram: %s", title)
-        _send(chat_id, f"Descargando: {title}")
-        filename = downloader.download_video("telegram", url)
-        database.register(youtube_id or filename.stem, title, channel, filename)
-        logger.info("Listo para sincronizar: %s", filename)
-        _send(chat_id, f"Listo para sincronizar con el iPod: {title}")
+        if command == "/yt":
+            _handle_youtube(chat_id, payload)
+        elif command == "/tw":
+            _handle_twitter_video(chat_id, payload)
+        elif command == "/epub":
+            _handle_epub(chat_id, payload)
     except Exception as exc:
-        logger.exception("Error descargando video desde Telegram")
-        _send(chat_id, f"Error descargando el video: {exc}")
+        logger.exception("Error procesando comando %s", command)
+        _send(chat_id, f"Error procesando {command}: {exc}")
 
 
 def run_polling():
     setup_logging("telegram_bot")
     database.initialize()
+    Path(config.TEMP_DIR).mkdir(parents=True, exist_ok=True)
     offset = None
     logger.info("Bot de Telegram iniciado")
     while True:

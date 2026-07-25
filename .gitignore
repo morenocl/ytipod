@@ -17,6 +17,7 @@ deploy/udev/*.rules
 logs/
 downloads/
 src/downloads/
+tmp/
 
 # Python
 __pycache__/
