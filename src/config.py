@@ -30,6 +30,13 @@ TEMP_DIR = Path(os.getenv("YTIPOD_TEMP_DIR", PROJECT_ROOT / "tmp")).resolve()
 IPOD_MOUNT = Path(os.getenv("YTIPOD_IPOD_MOUNT", "/media/ipod")).resolve()
 IPOD_VIDEO_DIR = Path(os.getenv("YTIPOD_IPOD_VIDEO_DIR", IPOD_MOUNT / "Videos")).resolve()
 
+IPOD_VIDEO_WIDTH = int(os.getenv("YTIPOD_IPOD_VIDEO_WIDTH", "320"))
+IPOD_VIDEO_HEIGHT = int(os.getenv("YTIPOD_IPOD_VIDEO_HEIGHT", "240"))
+IPOD_VIDEO_FPS = int(os.getenv("YTIPOD_IPOD_VIDEO_FPS", "25"))
+IPOD_VIDEO_BITRATE = os.getenv("YTIPOD_IPOD_VIDEO_BITRATE", "700k")
+IPOD_AUDIO_BITRATE = os.getenv("YTIPOD_IPOD_AUDIO_BITRATE", "128k")
+KEEP_SOURCE_VIDEO = os.getenv("YTIPOD_KEEP_SOURCE_VIDEO", "0").lower() in {"1", "true", "yes"}
+
 TELEGRAM_TOKEN = os.getenv("YTIPOD_TELEGRAM_TOKEN", "")
 TELEGRAM_ALLOWED_CHAT_ID = os.getenv("YTIPOD_TELEGRAM_ALLOWED_CHAT_ID", "")
 

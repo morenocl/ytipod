@@ -1,6 +1,6 @@
 # ytipod
 
-Servidor Python para descargar videos de YouTube por filtros de canal/titulo, registrar descargas en SQLite y copiarlas al iPod cuando este montado.
+Servidor Python para descargar videos de YouTube por filtros de canal/titulo, convertirlos a MPEG para Rockbox/iPod, registrar descargas en SQLite y copiarlas al iPod cuando este montado.
 
 ## Configuracion
 
@@ -18,6 +18,11 @@ export YTIPOD_DOWNLOAD_DIR=ytipod/downloads
 export YTIPOD_LOG_DIR=ytipod/logs
 export YTIPOD_TEMP_DIR=ytipod/tmp
 export YTIPOD_IPOD_VIDEO_DIR=/media/ipod/Videos
+export YTIPOD_IPOD_VIDEO_WIDTH=320
+export YTIPOD_IPOD_VIDEO_HEIGHT=240
+export YTIPOD_IPOD_VIDEO_FPS=25
+export YTIPOD_IPOD_VIDEO_BITRATE=700k
+export YTIPOD_IPOD_AUDIO_BITRATE=128k
 export YTIPOD_TELEGRAM_TOKEN=<TELEGRAM_BOT_TOKEN>
 export YTIPOD_TELEGRAM_ALLOWED_CHAT_ID=<TELEGRAM_CHAT_ID>
 ```
