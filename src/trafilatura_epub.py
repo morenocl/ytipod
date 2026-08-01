@@ -377,7 +377,14 @@ def build_epub_from_url(url, output_dir):
             filename.unlink()
 
         subprocess.run(
-            ["pandoc", str(html_path), "-o", str(epub_temp_path)],
+            [
+                "pandoc",
+                str(html_path),
+                "--resource-path",
+                str(temp_dir),
+                "-o",
+                str(epub_temp_path),
+            ],
             check=True,
         )
         epub_temp_path.replace(filename)
