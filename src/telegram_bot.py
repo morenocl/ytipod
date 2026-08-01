@@ -125,6 +125,23 @@ def _send_document(chat_id, file_path, caption=None):
     _api_multipart("sendDocument", fields, "document", file_path)
 
 
+def _register_commands():
+    _api(
+        "setMyCommands",
+        {
+            "commands": json.dumps(
+                [
+                    {"command": "yt", "description": "Descargar video de YouTube"},
+                    {"command": "tw", "description": "Descargar video desde un link"},
+                    {"command": "epub", "description": "Generar EPUB con el extractor actual"},
+                    {"command": "ep-trafilatura", "description": "Generar EPUB con Trafilatura y Pandoc"},
+                ],
+                ensure_ascii=False,
+            )
+        },
+    )
+
+
 def _allowed(chat_id):
     allowed = config.TELEGRAM_ALLOWED_CHAT_ID.strip()
     return not allowed or str(chat_id) == allowed
@@ -322,6 +339,7 @@ def run_polling():
     database.initialize()
     Path(config.TEMP_DIR).mkdir(parents=True, exist_ok=True)
     Path(config.EPUB_DIR).mkdir(parents=True, exist_ok=True)
+    _register_commands()
     offset = None
     logger.info("Bot de Telegram iniciado")
     while True:
