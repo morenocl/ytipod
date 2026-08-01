@@ -29,7 +29,7 @@ export YTIPOD_TELEGRAM_ALLOWED_CHAT_ID=<TELEGRAM_CHAT_ID>
 
 Cada ejecucion crea un log nuevo en `logs/` con fecha y hora en el nombre, por ejemplo `scan_20260712_030000.log`.
 
-Los videos se guardan bajo `YTIPOD_DOWNLOAD_DIR/Videos/` y los podcasts bajo `YTIPOD_DOWNLOAD_DIR/Podcast/`. Los videos destinados al iPod se guardan como `.mpg` con prefijo `YYMMDD-` segun la fecha de subida a YouTube, por ejemplo `240102-Titulo [id].mpg`, para conservar el orden al copiar al dispositivo.
+Los videos se guardan bajo `YTIPOD_DOWNLOAD_DIR/Videos/` y los podcasts bajo `YTIPOD_DOWNLOAD_DIR/Podcast/`. Al sincronizar, se copia preservando la estructura relativa hacia `YTIPOD_IPOD_MOUNT/Videos` y `YTIPOD_IPOD_MOUNT/Podcast`. Los videos destinados al iPod se guardan como `.mpg` con prefijo `YYMMDD-` segun la fecha de subida a YouTube, por ejemplo `240102-Titulo [id].mpg`, para conservar el orden al copiar al dispositivo.
 
 ## Uso
 

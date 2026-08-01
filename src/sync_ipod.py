@@ -9,13 +9,32 @@ from logging_config import setup_logging
 logger = logging.getLogger(__name__)
 
 
-def sync_pending(ipod_video_dir=None):
-    database.initialize()
-    destination = Path(ipod_video_dir or config.IPOD_VIDEO_DIR)
+def _copy_preserving_structure(source, source_root, destination_root):
+    source = Path(source)
+    source_root = Path(source_root)
+    destination_root = Path(destination_root)
+    try:
+        relative = source.relative_to(source_root)
+    except ValueError:
+        relative = source.name
+    target = destination_root / relative
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, target)
+    return target
 
-    if not destination.exists():
+
+def sync_pending(ipod_video_dir=None, ipod_podcast_dir=None):
+    database.initialize()
+    video_destination = Path(ipod_video_dir or config.IPOD_VIDEO_DIR)
+    podcast_destination = Path(ipod_podcast_dir or config.IPOD_PODCAST_DIR)
+
+    if not video_destination.exists():
         raise FileNotFoundError(
-            f"No existe el directorio del iPod: {destination}. Ajusta YTIPOD_IPOD_VIDEO_DIR."
+            f"No existe el directorio del iPod: {video_destination}. Ajusta YTIPOD_IPOD_VIDEO_DIR."
+        )
+    if not podcast_destination.exists():
+        raise FileNotFoundError(
+            f"No existe el directorio del iPod: {podcast_destination}. Ajusta YTIPOD_IPOD_PODCAST_DIR."
         )
 
     copied = 0
@@ -25,8 +44,7 @@ def sync_pending(ipod_video_dir=None):
             logger.warning("Archivo no encontrado, queda pendiente: %s", source)
             continue
 
-        target = destination / source.name
-        shutil.copy2(source, target)
+        target = _copy_preserving_structure(source, config.VIDEOS_DIR, video_destination)
         database.mark_synced(row["id"])
         if source.suffix.lower() == ".mpg":
             source.unlink(missing_ok=True)
@@ -39,8 +57,7 @@ def sync_pending(ipod_video_dir=None):
             logger.warning("Archivo de podcast no encontrado, queda pendiente: %s", source)
             continue
 
-        target = destination / source.name
-        shutil.copy2(source, target)
+        target = _copy_preserving_structure(source, config.PODCAST_DIR, podcast_destination)
         database.mark_podcast_synced(row["id"])
         copied += 1
         logger.info("Podcast copiado al iPod: %s", target)

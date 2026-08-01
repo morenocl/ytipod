@@ -32,6 +32,7 @@ PODCAST_DIR = (DOWNLOAD_DIR / "Podcast").resolve()
 EPUB_DIR = (DOWNLOAD_DIR / "epubs").resolve()
 IPOD_MOUNT = Path(os.getenv("YTIPOD_IPOD_MOUNT", "/media/ipod")).resolve()
 IPOD_VIDEO_DIR = Path(os.getenv("YTIPOD_IPOD_VIDEO_DIR", IPOD_MOUNT / "Videos")).resolve()
+IPOD_PODCAST_DIR = Path(os.getenv("YTIPOD_IPOD_PODCAST_DIR", IPOD_MOUNT / "Podcast")).resolve()
 
 IPOD_VIDEO_WIDTH = int(os.getenv("YTIPOD_IPOD_VIDEO_WIDTH", "320"))
 IPOD_VIDEO_HEIGHT = int(os.getenv("YTIPOD_IPOD_VIDEO_HEIGHT", "240"))
