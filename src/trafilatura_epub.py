@@ -104,9 +104,19 @@ def _source_image_urls(downloaded_html, base_url):
         logger.warning("No se pudo analizar el HTML original para recuperar imagenes")
         return []
 
-    # Prefer the article/main content. A plain //img fallback keeps this useful for
-    # sites that do not use semantic article or main elements.
-    images = document.xpath("//article//img | //main//img") or document.xpath("//img")
+    # Figures and hero images are part of the article on the sites targeted by
+    # this command. This avoids author avatars, navigation icons and related
+    # article cards which are often also nested under <main>.
+    article_images = document.xpath(
+        "//article//figure//img | //main//figure//img | "
+        "//article//*[contains(@class, 'featured-post-image')]//img | "
+        "//main//*[contains(@class, 'featured-post-image')]//img | "
+        "//article//*[contains(@class, 'hero')]//img | "
+        "//main//*[contains(@class, 'hero')]//img | "
+        "//article//*[contains(@class, 'rich-text')]//img | "
+        "//main//*[contains(@class, 'rich-text')]//img"
+    )
+    images = article_images or document.xpath("//article//img | //main//img") or document.xpath("//img")
     urls = []
     seen = set()
     for image in images:
@@ -184,6 +194,35 @@ def _add_missing_tei_image_urls(xml_text, base_url, source_images):
             element.set("src", image_url)
 
     return root
+
+
+def _append_unrepresented_tei_images(root, image_urls, graphic_count):
+    """Keep article images when Trafilatura omitted their graphic elements."""
+    missing_urls = image_urls[graphic_count:]
+    if not missing_urls:
+        return
+
+    body_nodes = _tei_xpath(root, ".//tei:text/tei:body") or _tei_xpath(root, ".//text/body")
+    if not body_nodes:
+        logger.warning("No se encontro el cuerpo TEI para agregar imagenes omitidas")
+        return
+
+    body = body_nodes[0]
+    namespace = _tei_ns(root)
+    tag = lambda name: f"{{{namespace}}}{name}" if namespace else name
+    figures = []
+    for image_url in missing_urls:
+        figure = etree.Element(tag("figure"))
+        graphic = etree.SubElement(figure, tag("graphic"))
+        graphic.set("url", image_url)
+        figures.append(figure)
+
+    # The first omitted image is normally the article cover. Put it before the
+    # text and append the remaining body images without losing them.
+    body.insert(0, figures[0])
+    for figure in figures[1:]:
+        body.append(figure)
+    logger.info("Se agregaron %d imagenes que Trafilatura habia omitido", len(figures))
 
 
 def _download_and_remap_tei_images(root, assets_dir):
@@ -364,7 +403,13 @@ def build_epub_from_url(url, output_dir):
         else:
             logger.warning("No se encontraron imagenes en el HTML original")
 
+        tei_graphic_count = sum(
+            1
+            for element in etree.fromstring(extracted_xml.encode("utf-8"), parser=etree.XMLParser(recover=True)).iter()
+            if isinstance(element.tag, str) and etree.QName(element).localname in {"graphic", "img"}
+        )
         enriched_tei = _add_missing_tei_image_urls(extracted_xml, url, source_images)
+        _append_unrepresented_tei_images(enriched_tei, source_images, tei_graphic_count)
         xml_filename = target_dir / f"{base_name}.tei.xml"
         xml_filename.write_text(etree.tostring(enriched_tei, encoding="unicode"), encoding="utf-8")
 
