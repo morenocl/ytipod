@@ -1,1 +1,2 @@
 yt-dlp==2026.7.4
+trafilatura==2.1.0

@@ -1,7 +1,13 @@
 import json
 import logging
 import mimetypes
+import re
+import shutil
+import subprocess
+import tempfile
 import time
+import unicodedata
+from html.parser import HTMLParser
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlparse
@@ -11,11 +17,58 @@ import config
 import database
 import downloader
 import epub_builder
+
+try:
+    import trafilatura
+except ImportError:
+    trafilatura = None
 from logging_config import setup_logging
 
 logger = logging.getLogger(__name__)
 
-COMMANDS = {"/yt", "/tw", "/epub"}
+COMMANDS = {"/yt", "/tw", "/epub", "/ep-trafilatura"}
+
+
+class _TitleParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.title = ""
+        self._in_title = False
+        self._in_h1 = False
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "title":
+            self._in_title = True
+        elif tag == "h1" and not self.title:
+            self._in_h1 = True
+
+    def handle_endtag(self, tag):
+        if tag == "title":
+            self._in_title = False
+        elif tag == "h1":
+            self._in_h1 = False
+
+    def handle_data(self, data):
+        text = " ".join(data.split())
+        if not text:
+            return
+        if self._in_title or self._in_h1:
+            if self.title:
+                return
+            self.title = text
+
+
+def _extract_html_title(html_text):
+    parser = _TitleParser()
+    parser.feed(html_text)
+    return parser.title.strip()
+
+
+def _slugify(value):
+    value = unicodedata.normalize("NFKD", value)
+    value = "".join(ch for ch in value if not unicodedata.combining(ch))
+    value = re.sub(r"[^A-Za-z0-9._-]+", "-", value).strip("-._")
+    return value[:80] or "article"
 
 
 def _api(method, params=None):
@@ -165,6 +218,75 @@ def _handle_epub(chat_id, text):
     _send_document(chat_id, filename, caption=title)
 
 
+def _handle_ep_trafilatura(chat_id, text):
+    url = _extract_url(text)
+    if not url:
+        _send(chat_id, "Uso: /ep-trafilatura <link de articulo>")
+        return
+
+    if trafilatura is None:
+        raise RuntimeError("Falta la libreria Python trafilatura en el entorno")
+    if not shutil.which("pandoc"):
+        raise RuntimeError("No se encontro el comando pandoc en el sistema")
+
+    target_dir = Path(config.EPUB_DIR)
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    logger.info("Generando EPUB con trafilatura y pandoc: %s", url)
+    _send(chat_id, "Generando EPUB...")
+
+    with tempfile.TemporaryDirectory(dir=Path(config.TEMP_DIR)) as temp_dir:
+        temp_dir = Path(temp_dir)
+        html_path = temp_dir / "article.html"
+        epub_temp_path = temp_dir / "article.epub"
+
+        downloaded = trafilatura.fetch_url(url)
+        if not downloaded:
+            raise RuntimeError("Trafilatura no pudo descargar el articulo")
+
+        extracted_html = trafilatura.extract(
+            downloaded,
+            url=url,
+            output_format="html",
+            include_images=True,
+            include_links=True,
+            include_formatting=True,
+            with_metadata=True,
+        )
+        if not extracted_html:
+            extracted_html = trafilatura.extract(
+                downloaded,
+                url=url,
+                output_format="html",
+                include_images=True,
+                include_links=True,
+                include_formatting=True,
+                with_metadata=False,
+            )
+        if not extracted_html:
+            raise RuntimeError("Trafilatura no pudo extraer contenido legible")
+
+        html_path.write_text(extracted_html, encoding="utf-8")
+        title = _extract_html_title(extracted_html)
+        if not title:
+            parsed = urlparse(url)
+            title = parsed.path.strip("/").split("/")[-1] or parsed.hostname or "articulo"
+
+        filename = target_dir / f"{_slugify(title)}.epub"
+        if filename.exists():
+            filename.unlink()
+
+        subprocess.run(
+            ["pandoc", str(html_path), "-o", str(epub_temp_path)],
+            check=True,
+        )
+        epub_temp_path.replace(filename)
+
+    database.register_epub_download(url, filename, title)
+    logger.info("EPUB generado y guardado: %s", filename)
+    _send_document(chat_id, filename, caption=title)
+
+
 def handle_message(message):
     chat_id = message.get("chat", {}).get("id")
     text = message.get("text", "")
@@ -176,9 +298,9 @@ def handle_message(message):
     command, payload = _parse_command(text)
     if not command:
         if _extract_url(text):
-            _send(chat_id, "Usa /yt para YouTube, /tw para videos de Twitter/X o /epub para articulos.")
+            _send(chat_id, "Usa /yt para YouTube, /tw para videos de Twitter/X, /epub para articulos o /ep-trafilatura para articulos.")
         else:
-            _send(chat_id, "Comandos disponibles: /yt, /tw, /epub")
+            _send(chat_id, "Comandos disponibles: /yt, /tw, /epub, /ep-trafilatura")
         return
 
     try:
@@ -188,6 +310,8 @@ def handle_message(message):
             _handle_twitter_video(chat_id, payload)
         elif command == "/epub":
             _handle_epub(chat_id, payload)
+        elif command == "/ep-trafilatura":
+            _handle_ep_trafilatura(chat_id, payload)
     except Exception as exc:
         logger.exception("Error procesando comando %s", command)
         _send(chat_id, f"Error procesando {command}: {exc}")
