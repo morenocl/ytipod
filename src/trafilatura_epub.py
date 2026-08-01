@@ -1,3 +1,4 @@
+import copy
 import logging
 import mimetypes
 import re
@@ -11,7 +12,7 @@ from pathlib import Path
 from urllib.parse import urljoin, urlparse
 from urllib.request import Request, urlopen
 
-from lxml import etree
+from lxml import etree, html as lxml_html
 
 import config
 
@@ -95,6 +96,28 @@ def _fetch_binary(url):
         return response.read(), response.headers.get_content_type()
 
 
+def _source_image_urls(downloaded_html, base_url):
+    """Return article image URLs in document order, excluding page chrome when possible."""
+    try:
+        document = lxml_html.fromstring(downloaded_html)
+    except (etree.ParserError, ValueError):
+        logger.warning("No se pudo analizar el HTML original para recuperar imagenes")
+        return []
+
+    # Prefer the article/main content. A plain //img fallback keeps this useful for
+    # sites that do not use semantic article or main elements.
+    images = document.xpath("//article//img | //main//img") or document.xpath("//img")
+    urls = []
+    seen = set()
+    for image in images:
+        source = _resolve_image_url(image.items(), base_url)
+        if not source or source in seen:
+            continue
+        seen.add(source)
+        urls.append(source)
+    return urls
+
+
 def _tei_ns(root):
     if isinstance(root.tag, str) and root.tag.startswith("{"):
         return root.tag.split("}", 1)[0][1:]
@@ -134,10 +157,38 @@ def _extract_tei_title(xml_text):
     return ""
 
 
-def _download_and_remap_tei_images(xml_text, base_url, assets_dir):
-    assets_dir.mkdir(parents=True, exist_ok=True)
+def _add_missing_tei_image_urls(xml_text, base_url, source_images):
+    """Populate empty TEI graphic nodes from the original article HTML."""
     parser = etree.XMLParser(recover=True, remove_blank_text=False)
     root = etree.fromstring(xml_text.encode("utf-8"), parser=parser)
+    source_images = iter(source_images)
+
+    for element in root.iter():
+        if not isinstance(element.tag, str):
+            continue
+        local_name = etree.QName(element).localname
+        if local_name not in {"graphic", "img"}:
+            continue
+
+        # Consume one source image for every extracted position, even where
+        # Trafilatura supplied an URL, so subsequent empty nodes stay aligned.
+        fallback_url = next(source_images, None)
+        image_url = _resolve_image_url(element.items(), base_url) or fallback_url
+        if not image_url:
+            logger.warning("No se encontro URL para una imagen extraida por Trafilatura")
+            continue
+
+        if local_name == "graphic":
+            element.set("url", image_url)
+        else:
+            element.set("src", image_url)
+
+    return root
+
+
+def _download_and_remap_tei_images(root, assets_dir):
+    """Download TEI image URLs and replace them with paths local to Pandoc."""
+    assets_dir.mkdir(parents=True, exist_ok=True)
     image_map = {}
     image_index = 0
 
@@ -148,7 +199,7 @@ def _download_and_remap_tei_images(xml_text, base_url, assets_dir):
         if local_name not in {"graphic", "img"}:
             continue
 
-        image_url = _resolve_image_url(element.items(), base_url)
+        image_url = _resolve_image_url(element.items(), "")
         if not image_url:
             continue
 
@@ -302,16 +353,23 @@ def build_epub_from_url(url, output_dir):
             raise RuntimeError("Trafilatura no pudo extraer contenido legible")
 
         base_name = _slugify(urlparse(url).path.strip("/") or urlparse(url).hostname or "articulo")
-        xml_filename = target_dir / f"{base_name}.tei.xml"
-        xml_filename.write_text(extracted_xml, encoding="utf-8")
-
         title = _extract_tei_title(extracted_xml)
         if not title:
             parsed = urlparse(url)
             title = parsed.path.strip("/").split("/")[-1] or parsed.hostname or "articulo"
 
-        tei_root = _download_and_remap_tei_images(extracted_xml, url, assets_dir)
-        tei_with_assets = etree.tostring(tei_root, encoding="unicode")
+        source_images = _source_image_urls(downloaded, url)
+        if source_images:
+            logger.info("Se encontraron %d imagenes en el HTML original", len(source_images))
+        else:
+            logger.warning("No se encontraron imagenes en el HTML original")
+
+        enriched_tei = _add_missing_tei_image_urls(extracted_xml, url, source_images)
+        xml_filename = target_dir / f"{base_name}.tei.xml"
+        xml_filename.write_text(etree.tostring(enriched_tei, encoding="unicode"), encoding="utf-8")
+
+        tei_for_epub = _download_and_remap_tei_images(copy.deepcopy(enriched_tei), assets_dir)
+        tei_with_assets = etree.tostring(tei_for_epub, encoding="unicode")
         html_path.write_text(_tei_to_html(tei_with_assets, title, url), encoding="utf-8")
 
         filename = target_dir / f"{_slugify(title)}.epub"
