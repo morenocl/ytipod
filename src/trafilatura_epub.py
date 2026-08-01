@@ -96,17 +96,14 @@ def _fetch_binary(url):
         return response.read(), response.headers.get_content_type()
 
 
-def _source_image_urls(downloaded_html, base_url):
-    """Return article image URLs in document order, excluding page chrome when possible."""
+def _source_image_records(downloaded_html, base_url):
+    """Return article images with their source position and optional caption."""
     try:
         document = lxml_html.fromstring(downloaded_html)
     except (etree.ParserError, ValueError):
         logger.warning("No se pudo analizar el HTML original para recuperar imagenes")
         return []
 
-    # Figures and hero images are part of the article on the sites targeted by
-    # this command. This avoids author avatars, navigation icons and related
-    # article cards which are often also nested under <main>.
     article_images = document.xpath(
         "//article//figure//img | //main//figure//img | "
         "//article//*[contains(@class, 'featured-post-image')]//img | "
@@ -117,15 +114,28 @@ def _source_image_urls(downloaded_html, base_url):
         "//main//*[contains(@class, 'rich-text')]//img"
     )
     images = article_images or document.xpath("//article//img | //main//img") or document.xpath("//img")
-    urls = []
+    records = []
     seen = set()
     for image in images:
         source = _resolve_image_url(image.items(), base_url)
         if not source or source in seen:
             continue
         seen.add(source)
-        urls.append(source)
-    return urls
+        container = image.getparent()
+        while container is not None and container.tag != "figure":
+            container = container.getparent()
+        caption_node = container.find(".//figcaption") if container is not None else None
+        caption = _tei_text(caption_node) if caption_node is not None else ""
+        if not caption:
+            caption = " ".join((image.get("alt") or "").split())
+        previous = container.getprevious() if container is not None else None
+        anchor = _tei_text(previous) if previous is not None else ""
+        records.append({"url": source, "caption": caption, "anchor": anchor})
+    return records
+
+
+def _source_image_urls(downloaded_html, base_url):
+    return [record["url"] for record in _source_image_records(downloaded_html, base_url)]
 
 
 def _tei_ns(root):
@@ -180,9 +190,8 @@ def _add_missing_tei_image_urls(xml_text, base_url, source_images):
         if local_name not in {"graphic", "img"}:
             continue
 
-        # Consume one source image for every extracted position, even where
-        # Trafilatura supplied an URL, so subsequent empty nodes stay aligned.
-        fallback_url = next(source_images, None)
+        fallback = next(source_images, None)
+        fallback_url = fallback["url"] if isinstance(fallback, dict) else fallback
         image_url = _resolve_image_url(element.items(), base_url) or fallback_url
         if not image_url:
             logger.warning("No se encontro URL para una imagen extraida por Trafilatura")
@@ -193,13 +202,27 @@ def _add_missing_tei_image_urls(xml_text, base_url, source_images):
         else:
             element.set("src", image_url)
 
+        caption = fallback.get("caption", "") if isinstance(fallback, dict) else ""
+        parent = element.getparent()
+        has_caption = parent is not None and any(
+            isinstance(child.tag, str) and etree.QName(child).localname == "figDesc"
+            for child in parent
+        )
+        if caption and local_name == "graphic" and parent is not None and not has_caption:
+            namespace = _tei_ns(root)
+            caption_node = etree.SubElement(
+                parent,
+                f"{{{namespace}}}figDesc" if namespace else "figDesc",
+            )
+            caption_node.text = caption
+
     return root
 
 
-def _append_unrepresented_tei_images(root, image_urls, graphic_count):
-    """Keep article images when Trafilatura omitted their graphic elements."""
-    missing_urls = image_urls[graphic_count:]
-    if not missing_urls:
+def _append_unrepresented_tei_images(root, image_records, graphic_count):
+    """Insert omitted article images after their preceding paragraph."""
+    missing_records = image_records[graphic_count:]
+    if not missing_records:
         return
 
     body_nodes = _tei_xpath(root, ".//tei:text/tei:body") or _tei_xpath(root, ".//text/body")
@@ -210,19 +233,34 @@ def _append_unrepresented_tei_images(root, image_urls, graphic_count):
     body = body_nodes[0]
     namespace = _tei_ns(root)
     tag = lambda name: f"{{{namespace}}}{name}" if namespace else name
-    figures = []
-    for image_url in missing_urls:
+    content = next(
+        (node for node in body if isinstance(node.tag, str) and etree.QName(node).localname == "div"),
+        body,
+    )
+    blocks = [node for node in content.iter() if isinstance(node.tag, str) and etree.QName(node).localname in {"p", "ab", "head"}]
+
+    for index, record in enumerate(missing_records):
         figure = etree.Element(tag("figure"))
         graphic = etree.SubElement(figure, tag("graphic"))
-        graphic.set("url", image_url)
-        figures.append(figure)
+        graphic.set("url", record["url"])
+        if record.get("caption"):
+            description = etree.SubElement(figure, tag("figDesc"))
+            description.text = record["caption"]
 
-    # The first omitted image is normally the article cover. Put it before the
-    # text and append the remaining body images without losing them.
-    body.insert(0, figures[0])
-    for figure in figures[1:]:
-        body.append(figure)
-    logger.info("Se agregaron %d imagenes que Trafilatura habia omitido", len(figures))
+        anchor = " ".join(record.get("anchor", "").split())[:120]
+        target = next((node for node in blocks if anchor and anchor in _tei_text(node)), None)
+        if target is not None:
+            parent = target.getparent()
+            parent.insert(parent.index(target) + 1, figure)
+            continue
+
+        # The first image without a preceding paragraph is normally the cover.
+        # Keep it at the beginning; unanchored subsequent images remain in order.
+        if index == 0:
+            content.insert(0, figure)
+        else:
+            content.append(figure)
+    logger.info("Se agregaron %d imagenes que Trafilatura habia omitido", len(missing_records))
 
 
 def _download_and_remap_tei_images(root, assets_dir):
@@ -326,8 +364,10 @@ def _render_block(node):
     if tag == "graphic":
         src = escape(node.get("url") or node.get("src") or "", quote=True)
         if src:
-            return f'<figure><img src="{src}" alt="" /></figure>{tail}'
+            return f'<img src="{src}" alt="" />{tail}'
         return tail
+    if tag == "figDesc":
+        return f"<figcaption>{text}{children}</figcaption>{tail}"
     if tag in {"div", "body", "text", "front", "back", "article"}:
         return f"{text}{children}{tail}"
     if tag in {"hi", "emph", "ref", "seg", "span", "note", "lb"}:
@@ -397,7 +437,7 @@ def build_epub_from_url(url, output_dir):
             parsed = urlparse(url)
             title = parsed.path.strip("/").split("/")[-1] or parsed.hostname or "articulo"
 
-        source_images = _source_image_urls(downloaded, url)
+        source_images = _source_image_records(downloaded, url)
         if source_images:
             logger.info("Se encontraron %d imagenes en el HTML original", len(source_images))
         else:
@@ -408,8 +448,13 @@ def build_epub_from_url(url, output_dir):
             for element in etree.fromstring(extracted_xml.encode("utf-8"), parser=etree.XMLParser(recover=True)).iter()
             if isinstance(element.tag, str) and etree.QName(element).localname in {"graphic", "img"}
         )
-        enriched_tei = _add_missing_tei_image_urls(extracted_xml, url, source_images)
-        _append_unrepresented_tei_images(enriched_tei, source_images, tei_graphic_count)
+        matching_images = source_images
+        if tei_graphic_count and len(source_images) > tei_graphic_count:
+            # The HTML usually contains a cover before the body figures, while
+            # Trafilatura's graphic positions start at the first body figure.
+            matching_images = source_images[1:]
+        enriched_tei = _add_missing_tei_image_urls(extracted_xml, url, matching_images)
+        _append_unrepresented_tei_images(enriched_tei, matching_images, tei_graphic_count)
         xml_filename = target_dir / f"{base_name}.tei.xml"
         xml_filename.write_text(etree.tostring(enriched_tei, encoding="unicode"), encoding="utf-8")
 
