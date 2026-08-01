@@ -6,3 +6,4 @@ Type=oneshot
 WorkingDirectory=/path/to/ytipod
 EnvironmentFile=-/path/to/ytipod/.env
 ExecStart=/path/to/ytipod/venv/bin/python /path/to/ytipod/src/main.py scan
+OnSuccess=ytipod-sync-ipod.service
