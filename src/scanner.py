@@ -65,7 +65,7 @@ def _video_date(video_url, flat_video=None):
 
 def scan_youtube_playlist(playlist):
     playlist_url = playlist["playlist_url"]
-    cutoff_date = _parse_date(playlist.get("cutoff_date")) or datetime.today().date()
+    cutoff_date = _parse_date(playlist["cutoff_date"]) or datetime.today().date()
     info = list_playlist(playlist_url)
     playlist_title = info.get("title") or playlist["playlist_title"] or "YouTube Playlist"
     if playlist["playlist_title"] != playlist_title:
