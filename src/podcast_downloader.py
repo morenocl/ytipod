@@ -91,7 +91,7 @@ def scan_subscription(subscription):
         logger.warning("Podcast sin feed_url, no se puede descargar: %s (%s)", podcast_title, spotify_url)
         return {"podcast": podcast_title, "matched": 0, "downloaded": 0}
 
-    base_dir = Path(config.DOWNLOAD_DIR) / _slugify(author) / _slugify(podcast_title)
+    base_dir = Path(config.PODCAST_DIR) / _slugify(author) / _slugify(podcast_title)
     downloaded = 0
     episodes = _parse_feed(feed_url)
     cutoff_date_value = _parse_iso_date(cutoff_date)

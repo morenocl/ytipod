@@ -13,6 +13,8 @@ logger = logging.getLogger(__name__)
 
 DOWNLOAD_DIR = Path(config.DOWNLOAD_DIR)
 DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
+VIDEO_DOWNLOAD_DIR = Path(config.VIDEOS_DIR)
+VIDEO_DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 YDL_OPTIONS = {
     "format": "bv*[ext=mp4][height<=480]+ba[ext=m4a]/b[ext=mp4][height<=480]/best[height<=480]/best",
@@ -137,7 +139,7 @@ def _convert_to_ipod_mpeg(source_file, target_file):
 
 
 def download_video_raw(folder_path, url, include_uploader_folder=True):
-    dirpath = DOWNLOAD_DIR / Path(folder_path)
+    dirpath = VIDEO_DOWNLOAD_DIR / Path(folder_path)
     dirpath.mkdir(parents=True, exist_ok=True)
     if include_uploader_folder:
         outtmpl = dirpath / "%(uploader)s" / "%(title)s [%(id)s].%(ext)s"

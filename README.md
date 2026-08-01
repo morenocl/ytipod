@@ -29,7 +29,7 @@ export YTIPOD_TELEGRAM_ALLOWED_CHAT_ID=<TELEGRAM_CHAT_ID>
 
 Cada ejecucion crea un log nuevo en `logs/` con fecha y hora en el nombre, por ejemplo `scan_20260712_030000.log`.
 
-Los videos destinados al iPod se guardan como `.mpg` con prefijo `YYMMDD-` segun la fecha de subida a YouTube, por ejemplo `240102-Titulo [id].mpg`, para conservar el orden al copiar al dispositivo.
+Los videos se guardan bajo `YTIPOD_DOWNLOAD_DIR/Videos/` y los podcasts bajo `YTIPOD_DOWNLOAD_DIR/Podcast/`. Los videos destinados al iPod se guardan como `.mpg` con prefijo `YYMMDD-` segun la fecha de subida a YouTube, por ejemplo `240102-Titulo [id].mpg`, para conservar el orden al copiar al dispositivo.
 
 ## Uso
 
@@ -62,6 +62,12 @@ Copiar pendientes al iPod:
 
 ```bash
 venv/bin/python src/main.py sync-ipod
+```
+
+Reorganizar una vez los archivos ya descargados al nuevo arbol `Videos/` y `Podcast/`:
+
+```bash
+venv/bin/python src/main.py reorganize-downloads
 ```
 
 Bot de Telegram:
@@ -101,7 +107,7 @@ venv/bin/python src/main.py scan-podcasts
 El scan nocturno (`venv/bin/python src/main.py scan`) tambien chequea podcasts. Los episodios quedan en:
 
 ```text
-YTIPOD_DOWNLOAD_DIR/Autora/Podcast/YYMMDD-Titulo.mp3
+YTIPOD_DOWNLOAD_DIR/Podcast/Autora/Podcast/YYMMDD-Titulo.mp3
 ```
 
 Spotify no expone una descarga completa de episodios desde la URL `open.spotify.com/show/...`; por eso `feed_url` es necesario para descargar contenido. Si una suscripcion no tiene RSS, queda registrada pero el scan la omite con un warning.
