@@ -66,6 +66,13 @@ def _send(chat_id, text):
     _api("sendMessage", {"chat_id": chat_id, "text": text})
 
 
+def _safe_send(chat_id, text):
+    try:
+        _send(chat_id, text)
+    except Exception:
+        logger.exception("No se pudo enviar mensaje a Telegram")
+
+
 def _send_document(chat_id, file_path, caption=None):
     fields = {"chat_id": chat_id}
     if caption:
@@ -201,19 +208,19 @@ def handle_message(message):
     chat_id = message.get("chat", {}).get("id")
     text = message.get("text", "")
 
-    if not _allowed(chat_id):
-        logger.warning("Mensaje ignorado de chat no autorizado: %s", chat_id)
-        return
-
-    command, payload = _parse_command(text)
-    if not command:
-        if _extract_url(text):
-            _send(chat_id, "Usa /yt para YouTube, /tw para videos de Twitter/X, /epub para articulos o /ep-trafilatura para articulos.")
-        else:
-            _send(chat_id, "Comandos disponibles: /yt, /tw, /epub, /ep-trafilatura")
-        return
-
     try:
+        if not _allowed(chat_id):
+            logger.warning("Mensaje ignorado de chat no autorizado: %s", chat_id)
+            return
+
+        command, payload = _parse_command(text)
+        if not command:
+            if _extract_url(text):
+                _safe_send(chat_id, "Usa /yt para YouTube, /tw para videos de Twitter/X, /epub para articulos o /ep-trafilatura para articulos.")
+            else:
+                _safe_send(chat_id, "Comandos disponibles: /yt, /tw, /epub, /ep-trafilatura")
+            return
+
         if command == "/yt":
             _handle_youtube(chat_id, payload)
         elif command == "/tw":
@@ -223,8 +230,12 @@ def handle_message(message):
         elif command == "/ep-trafilatura":
             _handle_ep_trafilatura(chat_id, payload)
     except Exception as exc:
-        logger.exception("Error procesando comando %s", command)
-        _send(chat_id, f"Error procesando {command}: {exc}")
+        logger.exception("Error procesando mensaje o comando")
+        try:
+            if chat_id is not None:
+                _safe_send(chat_id, f"Error procesando el mensaje: {exc}")
+        except Exception:
+            logger.exception("No se pudo notificar el error al chat")
 
 
 def run_polling():
@@ -232,7 +243,10 @@ def run_polling():
     database.initialize()
     Path(config.TEMP_DIR).mkdir(parents=True, exist_ok=True)
     Path(config.EPUB_DIR).mkdir(parents=True, exist_ok=True)
-    _register_commands()
+    try:
+        _register_commands()
+    except Exception:
+        logger.exception("No se pudieron registrar los comandos de Telegram")
     offset = None
     logger.info("Bot de Telegram iniciado")
     while True:
@@ -242,12 +256,18 @@ def run_polling():
                 params["offset"] = offset
             result = _api("getUpdates", params)
             for update in result.get("result", []):
-                offset = update["update_id"] + 1
-                message = update.get("message") or update.get("edited_message")
-                if message:
-                    handle_message(message)
+                try:
+                    offset = update["update_id"] + 1
+                    message = update.get("message") or update.get("edited_message")
+                    if message:
+                        handle_message(message)
+                except Exception:
+                    logger.exception("Error procesando un update de Telegram")
         except (HTTPError, URLError, TimeoutError) as exc:
             logger.warning("Error Telegram, reintentando: %s", exc)
+            time.sleep(10)
+        except Exception:
+            logger.exception("Error inesperado en el polling de Telegram")
             time.sleep(10)
 
 
