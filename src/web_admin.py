@@ -13,9 +13,9 @@ logger = logging.getLogger(__name__)
 TABLES = {
     "youtube_playlists": {
         "label": "Playlists de YouTube",
-        "columns": ["id", "playlist_url", "playlist_title", "created_at"],
-        "editable": ["playlist_url", "playlist_title"],
-        "required": ["playlist_url"],
+        "columns": ["id", "playlist_url", "playlist_title", "cutoff_date", "created_at"],
+        "editable": ["playlist_url", "playlist_title", "cutoff_date"],
+        "required": ["playlist_url", "cutoff_date"],
         "order": "playlist_title, playlist_url",
     },
     "downloads": {
@@ -35,9 +35,9 @@ TABLES = {
     },
     "podcast_subscriptions": {
         "label": "Podcasts",
-        "columns": ["id", "spotify_url", "author", "podcast_title", "feed_url", "created_at"],
-        "editable": ["spotify_url", "author", "podcast_title", "feed_url"],
-        "required": ["spotify_url", "author", "podcast_title"],
+        "columns": ["id", "spotify_url", "author", "podcast_title", "feed_url", "cutoff_date", "created_at"],
+        "editable": ["spotify_url", "author", "podcast_title", "feed_url", "cutoff_date"],
+        "required": ["spotify_url", "author", "podcast_title", "cutoff_date"],
         "order": "author, podcast_title",
     },
     "podcast_downloads": {
@@ -78,7 +78,7 @@ def _normalize_value(column, values):
     value = values.get(column, [""])[0].strip()
     if column in {"synced_to_ipod", "no_retry"}:
         return 1 if value in {"1", "true", "on", "yes"} else 0
-    if value == "" and column in {"synced_at", "published_at", "feed_url", "playlist_title", "title"}:
+    if value == "" and column in {"synced_at", "published_at", "feed_url", "playlist_title", "title", "cutoff_date"}:
         return None
     return value
 

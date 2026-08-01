@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 
 from yt_dlp import YoutubeDL
 
@@ -29,8 +30,42 @@ def list_playlist(playlist_url):
     return info or {}
 
 
+def _parse_date(value):
+    if not value:
+        return None
+    for fmt in ("%Y%m%d", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(str(value), fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def _video_date(video_url, flat_video=None):
+    if flat_video:
+        upload_date = flat_video.get("upload_date")
+        if upload_date:
+            parsed = _parse_date(upload_date)
+            if parsed:
+                return parsed
+        timestamp = flat_video.get("timestamp") or flat_video.get("release_timestamp")
+        if timestamp:
+            return datetime.fromtimestamp(timestamp).date()
+    info = downloader.get_video_info(video_url)
+    upload_date = info.get("upload_date")
+    if upload_date:
+        parsed = _parse_date(upload_date)
+        if parsed:
+            return parsed
+    timestamp = info.get("timestamp") or info.get("release_timestamp")
+    if timestamp:
+        return datetime.fromtimestamp(timestamp).date()
+    return None
+
+
 def scan_youtube_playlist(playlist):
     playlist_url = playlist["playlist_url"]
+    cutoff_date = _parse_date(playlist.get("cutoff_date")) or datetime.today().date()
     info = list_playlist(playlist_url)
     playlist_title = info.get("title") or playlist["playlist_title"] or "YouTube Playlist"
     if playlist["playlist_title"] != playlist_title:
@@ -60,6 +95,18 @@ def scan_youtube_playlist(playlist):
             continue
 
         matched += 1
+        video_url = f"https://www.youtube.com/watch?v={youtube_id}"
+        try:
+            video_date = _video_date(video_url, video)
+        except Exception:
+            logger.exception("No se pudo leer la fecha del video %s", youtube_id)
+            continue
+        if not video_date:
+            logger.warning("Video sin fecha, omitido por el corte %s: %s", cutoff_date, title)
+            continue
+        if video_date < cutoff_date:
+            logger.info('Omitido por fecha de corte %s: "%s"', cutoff_date, title)
+            continue
         if database.already_downloaded(youtube_id):
             logger.info('Ya registrado: "%s"', title)
             continue
@@ -71,7 +118,7 @@ def scan_youtube_playlist(playlist):
         try:
             source, video_info = downloader.download_video_raw(
                 folder_path,
-                f"https://www.youtube.com/watch?v={youtube_id}",
+                video_url,
                 include_uploader_folder=False,
             )
             prepared.append((youtube_id, title, source, video_info))

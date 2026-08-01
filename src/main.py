@@ -19,7 +19,7 @@ def cmd_init_db(_args):
 
 
 def cmd_add_youtube_playlist(args):
-    database.add_youtube_playlist(args.playlist_url, args.title)
+    database.add_youtube_playlist(args.playlist_url, args.title, args.since)
     logger.info("Playlist YouTube agregada: %s", args.title or args.playlist_url)
 
 
@@ -33,7 +33,7 @@ def cmd_list_youtube_playlists(_args):
 
 
 def cmd_add_podcast(args):
-    database.add_podcast_subscription(args.spotify_url, args.author, args.title, args.feed_url)
+    database.add_podcast_subscription(args.spotify_url, args.author, args.title, args.feed_url, args.since)
     logger.info("Podcast agregado: %s - %s", args.author, args.title)
 
 
@@ -97,6 +97,18 @@ def _convert_video_metadata(source):
     return video_id, title, channel
 
 
+def cmd_convert_video(args):
+    database.initialize()
+    source = Path(args.path).expanduser()
+    if not source.exists():
+        raise FileNotFoundError(f"No existe el archivo: {source}")
+
+    video_id, title, channel = _convert_video_metadata(source)
+    filename = downloader.convert_video_for_sync(source)
+    database.register(video_id, title, channel, filename)
+    logger.info("Video reconvertido y listo para sync: %s", filename)
+
+
 def cmd_sync_ipod(_args):
     copied = sync_ipod.sync_pending()
     logger.info("Videos sincronizados: %s", copied)
@@ -116,6 +128,7 @@ def build_parser():
     add_playlist = sub.add_parser("add-youtube-playlist")
     add_playlist.add_argument("playlist_url", help="URL de la playlist de YouTube")
     add_playlist.add_argument("--title", default=None, help="Titulo opcional; si se omite se completa al escanear")
+    add_playlist.add_argument("--since", default=None, help="Fecha minima YYYY-MM-DD para descargar contenido")
     add_playlist.set_defaults(func=cmd_add_youtube_playlist)
 
     list_playlists = sub.add_parser("list-youtube-playlists")
@@ -126,6 +139,7 @@ def build_parser():
     add_podcast.add_argument("author", help="Autora o autor del podcast")
     add_podcast.add_argument("title", help="Nombre del podcast")
     add_podcast.add_argument("--feed-url", default=None, help="RSS del podcast. Necesario para descargar episodios completos")
+    add_podcast.add_argument("--since", default=None, help="Fecha minima YYYY-MM-DD para descargar contenido")
     add_podcast.set_defaults(func=cmd_add_podcast)
 
     list_podcasts = sub.add_parser("list-podcasts")

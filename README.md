@@ -36,7 +36,7 @@ Los videos destinados al iPod se guardan como `.mpg` con prefijo `YYMMDD-` segun
 Agregar playlists de YouTube:
 
 ```bash
-venv/bin/python src/main.py add-youtube-playlist 'https://www.youtube.com/playlist?list=PLAYLIST_ID' --title 'Nombre opcional'
+venv/bin/python src/main.py add-youtube-playlist 'https://www.youtube.com/playlist?list=PLAYLIST_ID' --title 'Nombre opcional' --since '2026-08-01'
 venv/bin/python src/main.py list-youtube-playlists
 ```
 
@@ -91,7 +91,8 @@ venv/bin/python src/main.py add-podcast \
   'https://open.spotify.com/show/SPOTIFY_SHOW_ID' \
   'Nombre Autora' \
   'Nombre del podcast' \
-  --feed-url 'https://example.com/podcast/rss'
+  --feed-url 'https://example.com/podcast/rss' \
+  --since '2026-08-01'
 
 venv/bin/python src/main.py list-podcasts
 venv/bin/python src/main.py scan-podcasts

@@ -1,4 +1,5 @@
 import sqlite3
+from datetime import date
 from pathlib import Path
 
 import config
@@ -21,6 +22,7 @@ def initialize():
                 id INTEGER PRIMARY KEY,
                 playlist_url TEXT NOT NULL UNIQUE,
                 playlist_title TEXT,
+                cutoff_date TEXT NOT NULL,
                 created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
             """
@@ -61,6 +63,7 @@ def initialize():
                 author TEXT NOT NULL,
                 podcast_title TEXT NOT NULL,
                 feed_url TEXT,
+                cutoff_date TEXT NOT NULL,
                 created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
             """
@@ -113,12 +116,12 @@ def _migrate_podcasts(conn):
     columns = _table_columns(conn, "podcast_subscriptions")
     migrations = {
         "feed_url": "ALTER TABLE podcast_subscriptions ADD COLUMN feed_url TEXT",
+        "cutoff_date": "ALTER TABLE podcast_subscriptions ADD COLUMN cutoff_date TEXT NOT NULL DEFAULT CURRENT_DATE",
         "created_at": "ALTER TABLE podcast_subscriptions ADD COLUMN created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP",
     }
     for column, sql in migrations.items():
         if column not in columns:
             conn.execute(sql)
-
 
     columns = _table_columns(conn, "podcast_downloads")
     migrations = {
@@ -212,6 +215,17 @@ def find_download_by_filename(filename):
     return row
 
 
+def today_date():
+    return date.today().isoformat()
+
+
+def normalize_date(value):
+    if value is None:
+        return today_date()
+    value = str(value).strip()
+    return value or today_date()
+
+
 def mark_synced(download_id):
     initialize()
     with connect() as conn:
@@ -227,19 +241,21 @@ def mark_synced(download_id):
         conn.commit()
 
 
-def add_podcast_subscription(spotify_url, author, podcast_title, feed_url=None):
+def add_podcast_subscription(spotify_url, author, podcast_title, feed_url=None, cutoff_date=None):
     initialize()
+    cutoff_date = normalize_date(cutoff_date)
     with connect() as conn:
         conn.execute(
             """
-            INSERT INTO podcast_subscriptions(spotify_url, author, podcast_title, feed_url)
-            VALUES(?, ?, ?, ?)
+            INSERT INTO podcast_subscriptions(spotify_url, author, podcast_title, feed_url, cutoff_date)
+            VALUES(?, ?, ?, ?, ?)
             ON CONFLICT(spotify_url) DO UPDATE SET
                 author = excluded.author,
                 podcast_title = excluded.podcast_title,
-                feed_url = excluded.feed_url
+                feed_url = excluded.feed_url,
+                cutoff_date = excluded.cutoff_date
             """,
-            (spotify_url.strip(), author.strip(), podcast_title.strip(), (feed_url or "").strip() or None),
+            (spotify_url.strip(), author.strip(), podcast_title.strip(), (feed_url or "").strip() or None, cutoff_date),
         )
         conn.commit()
 
@@ -249,7 +265,7 @@ def get_podcast_subscriptions():
     with connect() as conn:
         return conn.execute(
             """
-            SELECT id, spotify_url, author, podcast_title, feed_url
+            SELECT id, spotify_url, author, podcast_title, feed_url, cutoff_date
             FROM podcast_subscriptions
             ORDER BY author, podcast_title
             """
@@ -338,17 +354,19 @@ def mark_podcast_synced(download_id):
         conn.commit()
 
 
-def add_youtube_playlist(playlist_url, playlist_title=None):
+def add_youtube_playlist(playlist_url, playlist_title=None, cutoff_date=None):
     initialize()
+    cutoff_date = normalize_date(cutoff_date)
     with connect() as conn:
         conn.execute(
             """
-            INSERT INTO youtube_playlists(playlist_url, playlist_title)
-            VALUES(?, ?)
+            INSERT INTO youtube_playlists(playlist_url, playlist_title, cutoff_date)
+            VALUES(?, ?, ?)
             ON CONFLICT(playlist_url) DO UPDATE SET
-                playlist_title = excluded.playlist_title
+                playlist_title = excluded.playlist_title,
+                cutoff_date = excluded.cutoff_date
             """,
-            (playlist_url.strip(), (playlist_title or "").strip() or None),
+            (playlist_url.strip(), (playlist_title or "").strip() or None, cutoff_date),
         )
         conn.commit()
 
@@ -358,7 +376,7 @@ def get_youtube_playlists():
     with connect() as conn:
         return conn.execute(
             """
-            SELECT id, playlist_url, playlist_title
+            SELECT id, playlist_url, playlist_title, cutoff_date
             FROM youtube_playlists
             ORDER BY playlist_title, playlist_url
             """

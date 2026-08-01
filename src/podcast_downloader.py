@@ -2,6 +2,7 @@ import hashlib
 import logging
 import re
 import shutil
+from datetime import datetime
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 from urllib.parse import urlparse
@@ -33,6 +34,15 @@ def _date_prefix(value):
         return dt.strftime("%y%m%d")
     except (TypeError, ValueError, IndexError):
         return hashlib.sha1(value.encode("utf-8")).hexdigest()[:6]
+
+
+def _parse_iso_date(value):
+    if not value:
+        return None
+    try:
+        return datetime.strptime(str(value), "%Y-%m-%d").date()
+    except ValueError:
+        return None
 
 
 def _extension_from_url(audio_url):
@@ -76,6 +86,7 @@ def scan_subscription(subscription):
     author = subscription["author"]
     podcast_title = subscription["podcast_title"]
     feed_url = subscription["feed_url"]
+    cutoff_date = subscription["cutoff_date"]
     if not feed_url:
         logger.warning("Podcast sin feed_url, no se puede descargar: %s (%s)", podcast_title, spotify_url)
         return {"podcast": podcast_title, "matched": 0, "downloaded": 0}
@@ -83,12 +94,26 @@ def scan_subscription(subscription):
     base_dir = Path(config.DOWNLOAD_DIR) / _slugify(author) / _slugify(podcast_title)
     downloaded = 0
     episodes = _parse_feed(feed_url)
+    cutoff_date_value = _parse_iso_date(cutoff_date)
+
     for episode in episodes:
         episode_id = _episode_id(feed_url, episode["guid"], episode["audio_url"])
         if database.podcast_episode_downloaded(episode_id):
             continue
         if database.podcast_download_blocked(episode_id):
             logger.info("Omitido por no_retry: %s", episode["title"])
+            continue
+
+        episode_date = None
+        try:
+            episode_date = parsedate_to_datetime(episode["published_at"]).date() if episode["published_at"] else None
+        except (TypeError, ValueError, IndexError):
+            episode_date = None
+        if cutoff_date_value and episode_date and episode_date < cutoff_date_value:
+            logger.info("Omitido por fecha de corte %s: %s", cutoff_date_value, episode["title"])
+            continue
+        if cutoff_date_value and not episode_date:
+            logger.warning("Episodio sin fecha, omitido por el corte %s: %s", cutoff_date_value, episode["title"])
             continue
 
         prefix = _date_prefix(episode["published_at"])
