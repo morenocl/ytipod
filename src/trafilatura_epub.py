@@ -156,6 +156,9 @@ def build_epub_from_url(url, output_dir):
         if not extracted_html:
             raise RuntimeError("Trafilatura no pudo extraer contenido legible")
 
+        html_filename = target_dir / f"{_slugify(urlparse(url).path.strip('/') or urlparse(url).hostname or 'articulo')}.html"
+        html_filename.write_text(extracted_html, encoding="utf-8")
+
         rewritten_html = _rewrite_images_for_epub(extracted_html, url, assets_dir)
         html_path.write_text(rewritten_html, encoding="utf-8")
         title = _extract_html_title(rewritten_html)
