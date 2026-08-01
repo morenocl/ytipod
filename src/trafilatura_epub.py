@@ -1,4 +1,5 @@
 import logging
+import mimetypes
 import re
 import shutil
 import subprocess
@@ -6,7 +7,10 @@ import tempfile
 import unicodedata
 from html.parser import HTMLParser
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
+from urllib.request import Request, urlopen
+
+from lxml import html as lxml_html
 
 import config
 
@@ -60,6 +64,67 @@ def _slugify(value):
     return value[:80] or "article"
 
 
+def _resolve_image_url(attrs, base_url):
+    attr_map = {key.lower(): value for key, value in attrs}
+    candidate = None
+    for key in ("src", "data-src", "data-original", "data-lazy-src"):
+        if attr_map.get(key):
+            candidate = attr_map[key]
+            break
+    if not candidate:
+        srcset = attr_map.get("srcset") or attr_map.get("data-srcset")
+        if srcset:
+            candidate = srcset.split(",", 1)[0].strip().split(" ", 1)[0]
+    if not candidate:
+        return None
+    return urljoin(base_url, candidate)
+
+
+def _image_extension(image_url, content_type):
+    suffix = Path(urlparse(image_url).path).suffix.lower()
+    if suffix in {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg"}:
+        return ".jpg" if suffix == ".jpeg" else suffix
+    guessed = mimetypes.guess_extension(content_type or "") or ".jpg"
+    return ".jpg" if guessed == ".jpe" else guessed
+
+
+def _fetch_binary(url):
+    request = Request(url, headers={"User-Agent": "Mozilla/5.0 ytipod/1.0"})
+    with urlopen(request, timeout=60) as response:
+        return response.read(), response.headers.get_content_type()
+
+
+def _rewrite_images_for_epub(html_text, base_url, assets_dir):
+    assets_dir.mkdir(parents=True, exist_ok=True)
+    root = lxml_html.fromstring(html_text)
+    image_map = {}
+    image_index = 0
+
+    for img in root.xpath("//img"):
+        image_url = _resolve_image_url(img.items(), base_url)
+        if not image_url:
+            continue
+        if image_url in image_map:
+            img.set("src", image_map[image_url])
+            for attr in ("srcset", "data-src", "data-original", "data-lazy-src"):
+                img.attrib.pop(attr, None)
+            continue
+        try:
+            data, content_type = _fetch_binary(image_url)
+            image_index += 1
+            ext = _image_extension(image_url, content_type)
+            filename = f"image-{image_index:02d}{ext}"
+            (assets_dir / filename).write_bytes(data)
+            image_map[image_url] = filename
+            img.set("src", filename)
+            for attr in ("srcset", "data-src", "data-original", "data-lazy-src"):
+                img.attrib.pop(attr, None)
+        except Exception:
+            logger.exception("No se pudo descargar una imagen para el EPUB: %s", image_url)
+
+    return lxml_html.tostring(root, encoding="unicode", method="html")
+
+
 def build_epub_from_url(url, output_dir):
     if trafilatura is None:
         raise RuntimeError("Falta la libreria Python trafilatura en el entorno")
@@ -73,6 +138,7 @@ def build_epub_from_url(url, output_dir):
         temp_dir = Path(temp_dir)
         html_path = temp_dir / "article.html"
         epub_temp_path = temp_dir / "article.epub"
+        assets_dir = temp_dir / "assets"
 
         downloaded = trafilatura.fetch_url(url)
         if not downloaded:
@@ -90,8 +156,9 @@ def build_epub_from_url(url, output_dir):
         if not extracted_html:
             raise RuntimeError("Trafilatura no pudo extraer contenido legible")
 
-        html_path.write_text(extracted_html, encoding="utf-8")
-        title = _extract_html_title(extracted_html)
+        rewritten_html = _rewrite_images_for_epub(extracted_html, url, assets_dir)
+        html_path.write_text(rewritten_html, encoding="utf-8")
+        title = _extract_html_title(rewritten_html)
         if not title:
             parsed = urlparse(url)
             title = parsed.path.strip("/").split("/")[-1] or parsed.hostname or "articulo"
@@ -100,7 +167,10 @@ def build_epub_from_url(url, output_dir):
         if filename.exists():
             filename.unlink()
 
-        subprocess.run(["pandoc", str(html_path), "-o", str(epub_temp_path)], check=True)
+        subprocess.run(
+            ["pandoc", str(html_path), "--resource-path", str(temp_dir), "-o", str(epub_temp_path)],
+            check=True,
+        )
         epub_temp_path.replace(filename)
 
     logger.info("EPUB generado: %s", filename)
