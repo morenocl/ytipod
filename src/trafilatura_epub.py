@@ -105,7 +105,7 @@ def _rewrite_images_for_epub(html_text, base_url, assets_dir):
         if not image_url:
             continue
         if image_url in image_map:
-            img.set("src", image_map[image_url])
+            img.set("src", f"assets/{image_map[image_url]}")
             for attr in ("srcset", "data-src", "data-original", "data-lazy-src"):
                 img.attrib.pop(attr, None)
             continue
@@ -116,7 +116,7 @@ def _rewrite_images_for_epub(html_text, base_url, assets_dir):
             filename = f"image-{image_index:02d}{ext}"
             (assets_dir / filename).write_bytes(data)
             image_map[image_url] = filename
-            img.set("src", filename)
+            img.set("src", f"assets/{filename}")
             for attr in ("srcset", "data-src", "data-original", "data-lazy-src"):
                 img.attrib.pop(attr, None)
         except Exception:
