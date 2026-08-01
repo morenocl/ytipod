@@ -1,5 +1,7 @@
 import logging
+import re
 import subprocess
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -68,20 +70,26 @@ def _upload_date_prefix(info):
     return video_id[:6].rjust(6, "0")
 
 
-def _add_ipod_sort_prefix(source_file, info):
+def _source_prefix(source_file):
     source = Path(source_file)
-    prefix = _upload_date_prefix(info)
-    if source.name.startswith(f"{prefix}-"):
-        return source
-
-    target = source.with_name(f"{prefix}-{source.name}")
-    source.replace(target)
-    return target
+    stem = source.stem
+    if len(stem) >= 7 and stem[:6].isdigit() and stem[6] == "-":
+        return stem[:6]
+    return datetime.fromtimestamp(source.stat().st_mtime).strftime("%y%m%d")
 
 
-def _convert_to_ipod_mpeg(source_file):
+def _ipod_video_target(source_file, info=None):
     source = Path(source_file)
-    target = source.with_suffix(".mpg")
+    prefix = _upload_date_prefix(info) if info is not None else _source_prefix(source)
+    stem = source.stem
+    if not stem.startswith(f"{prefix}-"):
+        stem = f"{prefix}-{stem}"
+    return source.with_name(f"{stem}.mpg")
+
+
+def _convert_to_ipod_mpeg(source_file, target_file):
+    source = Path(source_file)
+    target = Path(target_file)
     tmp_target = target.with_suffix(".tmp.mpg")
 
     width = config.IPOD_VIDEO_WIDTH
@@ -125,22 +133,51 @@ def _convert_to_ipod_mpeg(source_file):
     subprocess.run(cmd, check=True)
     tmp_target.replace(target)
 
-    if not config.KEEP_SOURCE_VIDEO and source != target:
-        source.unlink(missing_ok=True)
-
     return target
 
 
-def download_video(folder_path, url, include_uploader_folder=True):
+def download_video_raw(folder_path, url, include_uploader_folder=True):
     dirpath = DOWNLOAD_DIR / Path(folder_path)
     dirpath.mkdir(parents=True, exist_ok=True)
     if include_uploader_folder:
         outtmpl = dirpath / "%(uploader)s" / "%(title)s [%(id)s].%(ext)s"
     else:
         outtmpl = dirpath / "%(title)s [%(id)s].%(ext)s"
-    source, info = _download_with_template(url, outtmpl)
-    source = _add_ipod_sort_prefix(source, info)
-    return _convert_to_ipod_mpeg(source)
+    return _download_with_template(url, outtmpl)
+
+
+def finalize_downloaded_video(source_file, info):
+    source = Path(source_file)
+    target = _ipod_video_target(source, info)
+    return _convert_to_ipod_mpeg(source, target)
+
+
+def convert_video_for_sync(source_file, info=None):
+    source = Path(source_file)
+    if source.suffix.lower() != ".mp4":
+        raise ValueError(f"Se esperaba un archivo .mp4: {source}")
+    target = _ipod_video_target(source, info)
+    return _convert_to_ipod_mpeg(source, target)
+
+
+def youtube_id_from_filename(filename):
+    stem = Path(filename).stem
+    match = re.search(r"\[([^\[\]]+)\]$", stem)
+    if match:
+        return match.group(1)
+    return None
+
+
+def title_from_filename(filename):
+    stem = Path(filename).stem
+    stem = re.sub(r"^\d{6}-", "", stem)
+    stem = re.sub(r"\s*\[[^\[\]]+\]$", "", stem)
+    return stem or Path(filename).stem
+
+
+def download_video(folder_path, url, include_uploader_folder=True):
+    source, info = download_video_raw(folder_path, url, include_uploader_folder=include_uploader_folder)
+    return finalize_downloaded_video(source, info)
 
 
 def download_video_to_dir(url, target_dir):

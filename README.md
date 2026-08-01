@@ -52,6 +52,12 @@ Descargar un link enviado manualmente:
 venv/bin/python src/main.py download-url 'https://www.youtube.com/watch?v=VIDEO_ID'
 ```
 
+Reconstruir manualmente un video local ya descargado a formato iPod y dejarlo pendiente de sincronizacion. Solo hace falta el path del archivo; el titulo, el ID y el canal se toman de la base de datos o se derivan del nombre/ruta del archivo:
+
+```bash
+venv/bin/python src/main.py convert-video /ruta/al/video.mp4
+```
+
 Copiar pendientes al iPod:
 
 ```bash

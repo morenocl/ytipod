@@ -110,13 +110,30 @@ def _handle_youtube(chat_id, text):
         logger.info("Ya estaba descargado desde Telegram: %s", title)
         _send(chat_id, f"Ya estaba descargado: {title}")
         return
+    if youtube_id and database.download_blocked(youtube_id):
+        logger.info("Descarga bloqueada por no_retry desde Telegram: %s", title)
+        _send(chat_id, f"La descarga esta marcada como no reintentar: {title}")
+        return
 
     logger.info("Descargando YouTube desde Telegram: %s", title)
     _send(chat_id, f"Descargando para el iPod: {title}")
-    filename = downloader.download_video("telegram", url)
-    database.register(youtube_id or filename.stem, title, channel, filename)
-    logger.info("Listo para sincronizar: %s", filename)
-    _send(chat_id, f"Listo para sincronizar con el iPod: {title}")
+    try:
+        source, info = downloader.download_video_raw("telegram", url)
+        filename = downloader.finalize_downloaded_video(source, info)
+        database.register(youtube_id or filename.stem, title, channel, filename)
+        logger.info("Listo para sincronizar: %s", filename)
+        _send(chat_id, f"Listo para sincronizar con el iPod: {title}")
+    except Exception as exc:
+        logger.exception("Fallo la descarga desde Telegram: %s", title)
+        if youtube_id:
+            database.register_download_failure(
+                video_id=youtube_id,
+                title=title,
+                channel=channel,
+                error=str(exc),
+                no_retry=False,
+            )
+        _send(chat_id, f"Error descargando el video: {exc}")
 
 
 def _handle_twitter_video(chat_id, text):

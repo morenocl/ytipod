@@ -87,22 +87,39 @@ def scan_subscription(subscription):
         episode_id = _episode_id(feed_url, episode["guid"], episode["audio_url"])
         if database.podcast_episode_downloaded(episode_id):
             continue
+        if database.podcast_download_blocked(episode_id):
+            logger.info("Omitido por no_retry: %s", episode["title"])
+            continue
 
         prefix = _date_prefix(episode["published_at"])
         suffix = _extension_from_url(episode["audio_url"])
         filename = base_dir / f"{prefix}-{_slugify(episode['title'])}{suffix}"
         logger.info("Descargando podcast: %s -> %s", episode["title"], filename)
-        _download_file(episode["audio_url"], filename)
-        database.register_podcast_download(
-            episode_id=episode_id,
-            spotify_url=spotify_url,
-            author=author,
-            podcast_title=podcast_title,
-            episode_title=episode["title"],
-            filename=filename,
-            published_at=episode["published_at"],
-        )
-        downloaded += 1
+        try:
+            _download_file(episode["audio_url"], filename)
+            database.register_podcast_download(
+                episode_id=episode_id,
+                spotify_url=spotify_url,
+                author=author,
+                podcast_title=podcast_title,
+                episode_title=episode["title"],
+                filename=filename,
+                published_at=episode["published_at"],
+            )
+            downloaded += 1
+        except Exception as exc:
+            logger.exception("Fallo la descarga del podcast: %s", episode["title"])
+            database.register_podcast_download_failure(
+                episode_id=episode_id,
+                spotify_url=spotify_url,
+                author=author,
+                podcast_title=podcast_title,
+                episode_title=episode["title"],
+                error=str(exc),
+                no_retry=False,
+                published_at=episode["published_at"],
+            )
+            continue
 
     return {"podcast": podcast_title, "matched": len(episodes), "downloaded": downloaded}
 
@@ -112,5 +129,8 @@ def scan_all():
     results = []
     for subscription in database.get_podcast_subscriptions():
         logger.info("Escaneando podcast: %s - %s", subscription["author"], subscription["podcast_title"])
-        results.append(scan_subscription(subscription))
+        try:
+            results.append(scan_subscription(subscription))
+        except Exception:
+            logger.exception("Fallo el podcast: %s - %s", subscription["author"], subscription["podcast_title"])
     return results

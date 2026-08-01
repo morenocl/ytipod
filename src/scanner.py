@@ -47,6 +47,7 @@ def scan_youtube_playlist(playlist):
     )
     playlist_dir = _safe_dirname(playlist_title)
     folder_path = f"{owner}/{playlist_dir}"
+    prepared = []
 
     for video in info.get("entries", []) if info else []:
         if not video:
@@ -62,17 +63,51 @@ def scan_youtube_playlist(playlist):
         if database.already_downloaded(youtube_id):
             logger.info('Ya registrado: "%s"', title)
             continue
+        if database.download_blocked(youtube_id):
+            logger.info('Omitido por no_retry: "%s"', title)
+            continue
 
         logger.info('Descargando desde playlist %s: "%s"', playlist_title, title)
-        filename = downloader.download_video(folder_path, f"https://www.youtube.com/watch?v={youtube_id}", include_uploader_folder=False)
-        database.register(
-            video_id=youtube_id,
-            channel=playlist_title,
-            title=title,
-            filename=filename,
-        )
-        logger.info("Registrado: %s", filename)
-        downloaded += 1
+        try:
+            source, video_info = downloader.download_video_raw(
+                folder_path,
+                f"https://www.youtube.com/watch?v={youtube_id}",
+                include_uploader_folder=False,
+            )
+            prepared.append((youtube_id, title, source, video_info))
+        except Exception as exc:
+            logger.exception("Fallo la descarga de playlist %s: %s", playlist_title, title)
+            database.register_download_failure(
+                video_id=youtube_id,
+                title=title,
+                channel=playlist_title,
+                error=str(exc),
+                no_retry=False,
+            )
+            continue
+
+    for youtube_id, title, source, video_info in prepared:
+        try:
+            filename = downloader.finalize_downloaded_video(source, video_info)
+            database.register(
+                video_id=youtube_id,
+                channel=playlist_title,
+                title=title,
+                filename=filename,
+            )
+            logger.info("Registrado: %s", filename)
+            downloaded += 1
+        except Exception as exc:
+            logger.exception("Fallo la conversion de playlist %s: %s", playlist_title, title)
+            database.register_download_failure(
+                video_id=youtube_id,
+                title=title,
+                channel=playlist_title,
+                error=str(exc),
+                no_retry=False,
+                filename=source,
+            )
+            continue
 
     return {"playlist": playlist_title, "matched": matched, "downloaded": downloaded}
 
@@ -82,7 +117,10 @@ def scan_all():
     results = []
     for playlist in database.get_youtube_playlists():
         logger.info("Escaneando playlist YouTube: %s", playlist["playlist_title"] or playlist["playlist_url"])
-        results.append(scan_youtube_playlist(playlist))
+        try:
+            results.append(scan_youtube_playlist(playlist))
+        except Exception:
+            logger.exception("Fallo la playlist YouTube: %s", playlist["playlist_url"])
 
     podcast_results = podcast_downloader.scan_all()
     for result in podcast_results:

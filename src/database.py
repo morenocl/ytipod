@@ -35,7 +35,10 @@ def initialize():
                 filename TEXT NOT NULL,
                 downloaded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 synced_to_ipod INTEGER NOT NULL DEFAULT 0,
-                synced_at DATETIME
+                synced_at DATETIME,
+                download_failed INTEGER NOT NULL DEFAULT 0,
+                download_error TEXT,
+                no_retry INTEGER NOT NULL DEFAULT 0
             )
             """
         )
@@ -75,7 +78,10 @@ def initialize():
                 published_at TEXT,
                 downloaded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 synced_to_ipod INTEGER NOT NULL DEFAULT 0,
-                synced_at DATETIME
+                synced_at DATETIME,
+                download_failed INTEGER NOT NULL DEFAULT 0,
+                download_error TEXT,
+                no_retry INTEGER NOT NULL DEFAULT 0
             )
             """
         )
@@ -94,6 +100,9 @@ def _migrate_downloads(conn):
         "filename": "ALTER TABLE downloads ADD COLUMN filename TEXT NOT NULL DEFAULT ''",
         "synced_to_ipod": "ALTER TABLE downloads ADD COLUMN synced_to_ipod INTEGER NOT NULL DEFAULT 0",
         "synced_at": "ALTER TABLE downloads ADD COLUMN synced_at DATETIME",
+        "download_failed": "ALTER TABLE downloads ADD COLUMN download_failed INTEGER NOT NULL DEFAULT 0",
+        "download_error": "ALTER TABLE downloads ADD COLUMN download_error TEXT",
+        "no_retry": "ALTER TABLE downloads ADD COLUMN no_retry INTEGER NOT NULL DEFAULT 0",
     }
     for column, sql in migrations.items():
         if column not in columns:
@@ -111,6 +120,17 @@ def _migrate_podcasts(conn):
             conn.execute(sql)
 
 
+    columns = _table_columns(conn, "podcast_downloads")
+    migrations = {
+        "download_failed": "ALTER TABLE podcast_downloads ADD COLUMN download_failed INTEGER NOT NULL DEFAULT 0",
+        "download_error": "ALTER TABLE podcast_downloads ADD COLUMN download_error TEXT",
+        "no_retry": "ALTER TABLE podcast_downloads ADD COLUMN no_retry INTEGER NOT NULL DEFAULT 0",
+    }
+    for column, sql in migrations.items():
+        if column not in columns:
+            conn.execute(sql)
+
+
 def already_downloaded(video_id):
     initialize()
     with connect() as conn:
@@ -119,6 +139,8 @@ def already_downloaded(video_id):
             SELECT 1
             FROM downloads
             WHERE youtube_id = ?
+              AND COALESCE(filename, '') != ''
+              AND download_failed = 0
             """,
             (video_id,),
         ).fetchone()
@@ -130,13 +152,24 @@ def register(video_id, title, channel, filename):
     with connect() as conn:
         conn.execute(
             """
-            INSERT OR IGNORE INTO downloads(
+            INSERT INTO downloads(
                 youtube_id,
                 channel,
                 title,
-                filename
+                filename,
+                download_failed,
+                download_error
             )
-            VALUES(?, ?, ?, ?)
+            VALUES(?, ?, ?, ?, 0, NULL)
+            ON CONFLICT(youtube_id) DO UPDATE SET
+                channel = excluded.channel,
+                title = excluded.title,
+                filename = excluded.filename,
+                download_failed = 0,
+                download_error = NULL,
+                synced_to_ipod = 0,
+                synced_at = NULL,
+                no_retry = downloads.no_retry
             """,
             (video_id, channel, title, str(filename)),
         )
@@ -151,9 +184,32 @@ def pending_sync_downloads():
             SELECT id, title, filename
             FROM downloads
             WHERE synced_to_ipod = 0
+              AND download_failed = 0
+              AND COALESCE(filename, '') != ''
             ORDER BY downloaded_at
             """
         ).fetchall()
+
+
+def find_download_by_filename(filename):
+    initialize()
+    source = Path(filename)
+    exact = str(source)
+    resolved = str(source.resolve()) if source.exists() else exact
+    basename = source.name
+    with connect() as conn:
+        row = conn.execute(
+            """
+            SELECT id, youtube_id, channel, title, filename, downloaded_at
+            FROM downloads
+            WHERE filename IN (?, ?, ?)
+               OR filename LIKE ?
+            ORDER BY downloaded_at DESC, id DESC
+            LIMIT 1
+            """,
+            (exact, resolved, basename, f"%/{basename}"),
+        ).fetchone()
+    return row
 
 
 def mark_synced(download_id):
@@ -204,7 +260,13 @@ def podcast_episode_downloaded(episode_id):
     initialize()
     with connect() as conn:
         row = conn.execute(
-            "SELECT 1 FROM podcast_downloads WHERE episode_id = ?",
+            """
+            SELECT 1
+            FROM podcast_downloads
+            WHERE episode_id = ?
+              AND COALESCE(filename, '') != ''
+              AND download_failed = 0
+            """,
             (episode_id,),
         ).fetchone()
     return row is not None
@@ -215,10 +277,31 @@ def register_podcast_download(episode_id, spotify_url, author, podcast_title, ep
     with connect() as conn:
         conn.execute(
             """
-            INSERT OR IGNORE INTO podcast_downloads(
-                episode_id, spotify_url, author, podcast_title, episode_title, filename, published_at
+            INSERT INTO podcast_downloads(
+                episode_id,
+                spotify_url,
+                author,
+                podcast_title,
+                episode_title,
+                filename,
+                published_at,
+                download_failed,
+                download_error,
+                no_retry
             )
-            VALUES(?, ?, ?, ?, ?, ?, ?)
+            VALUES(?, ?, ?, ?, ?, ?, ?, 0, NULL, 0)
+            ON CONFLICT(episode_id) DO UPDATE SET
+                spotify_url = excluded.spotify_url,
+                author = excluded.author,
+                podcast_title = excluded.podcast_title,
+                episode_title = excluded.episode_title,
+                filename = excluded.filename,
+                published_at = excluded.published_at,
+                download_failed = 0,
+                download_error = NULL,
+                synced_to_ipod = 0,
+                synced_at = NULL,
+                no_retry = podcast_downloads.no_retry
             """,
             (episode_id, spotify_url, author, podcast_title, episode_title, str(filename), published_at),
         )
@@ -233,6 +316,8 @@ def pending_sync_podcast_downloads():
             SELECT id, episode_title AS title, filename
             FROM podcast_downloads
             WHERE synced_to_ipod = 0
+              AND download_failed = 0
+              AND COALESCE(filename, '') != ''
             ORDER BY published_at, downloaded_at
             """
         ).fetchall()
@@ -313,3 +398,97 @@ def get_epub_downloads():
             ORDER BY created_at DESC, id DESC
             """
         ).fetchall()
+
+
+def download_blocked(video_id):
+    initialize()
+    with connect() as conn:
+        row = conn.execute(
+            """
+            SELECT 1
+            FROM downloads
+            WHERE youtube_id = ?
+              AND download_failed = 1
+              AND no_retry = 1
+            """,
+            (video_id,),
+        ).fetchone()
+    return row is not None
+
+
+def register_download_failure(video_id, title, channel, error, no_retry=False, filename=""):
+    initialize()
+    with connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO downloads(
+                youtube_id,
+                channel,
+                title,
+                filename,
+                download_failed,
+                download_error,
+                no_retry
+            )
+            VALUES(?, ?, ?, ?, 1, ?, ?)
+            ON CONFLICT(youtube_id) DO UPDATE SET
+                channel = excluded.channel,
+                title = excluded.title,
+                filename = excluded.filename,
+                download_failed = 1,
+                download_error = excluded.download_error,
+                no_retry = MAX(downloads.no_retry, excluded.no_retry)
+            """,
+            (video_id, channel, title, str(filename), str(error), 1 if no_retry else 0),
+        )
+        conn.commit()
+
+
+def podcast_download_blocked(episode_id):
+    initialize()
+    with connect() as conn:
+        row = conn.execute(
+            """
+            SELECT 1
+            FROM podcast_downloads
+            WHERE episode_id = ?
+              AND download_failed = 1
+              AND no_retry = 1
+            """,
+            (episode_id,),
+        ).fetchone()
+    return row is not None
+
+
+def register_podcast_download_failure(episode_id, spotify_url, author, podcast_title, episode_title, error, no_retry=False, filename="", published_at=None):
+    initialize()
+    with connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO podcast_downloads(
+                episode_id,
+                spotify_url,
+                author,
+                podcast_title,
+                episode_title,
+                filename,
+                published_at,
+                download_failed,
+                download_error,
+                no_retry
+            )
+            VALUES(?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+            ON CONFLICT(episode_id) DO UPDATE SET
+                spotify_url = excluded.spotify_url,
+                author = excluded.author,
+                podcast_title = excluded.podcast_title,
+                episode_title = excluded.episode_title,
+                filename = excluded.filename,
+                published_at = excluded.published_at,
+                download_failed = 1,
+                download_error = excluded.download_error,
+                no_retry = MAX(podcast_downloads.no_retry, excluded.no_retry)
+            """,
+            (episode_id, spotify_url, author, podcast_title, episode_title, str(filename), published_at, str(error), 1 if no_retry else 0),
+        )
+        conn.commit()

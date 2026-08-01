@@ -28,6 +28,8 @@ def sync_pending(ipod_video_dir=None):
         target = destination / source.name
         shutil.copy2(source, target)
         database.mark_synced(row["id"])
+        if source.suffix.lower() == ".mpg":
+            source.unlink(missing_ok=True)
         copied += 1
         logger.info("Copiado al iPod: %s", target)
 

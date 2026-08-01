@@ -1,5 +1,6 @@
 import argparse
 import logging
+from pathlib import Path
 
 import database
 import downloader
@@ -64,10 +65,36 @@ def cmd_download_url(args):
     if youtube_id and database.already_downloaded(youtube_id):
         logger.info("Ya estaba descargado: %s", title)
         return
+    if youtube_id and database.download_blocked(youtube_id):
+        logger.info("Descarga bloqueada por no_retry: %s", title)
+        return
 
-    filename = downloader.download_video("manual", args.url)
-    database.register(youtube_id or filename.stem, title, channel, filename)
-    logger.info("Descargado: %s", filename)
+    try:
+        source, info = downloader.download_video_raw("manual", args.url)
+        filename = downloader.finalize_downloaded_video(source, info)
+        database.register(youtube_id or filename.stem, title, channel, filename)
+        logger.info("Descargado: %s", filename)
+    except Exception as exc:
+        logger.exception("Fallo la descarga manual: %s", title)
+        if youtube_id:
+            database.register_download_failure(
+                video_id=youtube_id,
+                title=title,
+                channel=channel,
+                error=str(exc),
+                no_retry=False,
+            )
+        raise
+
+
+def _convert_video_metadata(source):
+    record = database.find_download_by_filename(source)
+    video_id = record["youtube_id"] if record and record["youtube_id"] else None
+    title = record["title"] if record and record["title"] else downloader.title_from_filename(source)
+    channel = record["channel"] if record and record["channel"] else Path(source).parent.name or "manual"
+    if not video_id:
+        video_id = downloader.youtube_id_from_filename(source) or Path(source).stem
+    return video_id, title, channel
 
 
 def cmd_sync_ipod(_args):
@@ -113,6 +140,10 @@ def build_parser():
     download = sub.add_parser("download-url")
     download.add_argument("url")
     download.set_defaults(func=cmd_download_url)
+
+    convert = sub.add_parser("convert-video")
+    convert.add_argument("path", help="Ruta al .mp4 a reconvertir")
+    convert.set_defaults(func=cmd_convert_video)
 
     sync = sub.add_parser("sync-ipod")
     sync.set_defaults(func=cmd_sync_ipod)

@@ -20,8 +20,8 @@ TABLES = {
     },
     "downloads": {
         "label": "Videos descargados",
-        "columns": ["id", "youtube_id", "channel", "title", "filename", "downloaded_at", "synced_to_ipod", "synced_at"],
-        "editable": ["youtube_id", "channel", "title", "filename", "synced_to_ipod", "synced_at"],
+        "columns": ["id", "youtube_id", "channel", "title", "filename", "downloaded_at", "synced_to_ipod", "synced_at", "download_failed", "download_error", "no_retry"],
+        "editable": ["youtube_id", "channel", "title", "filename", "synced_to_ipod", "synced_at", "no_retry"],
         "required": ["youtube_id", "channel", "title", "filename"],
         "order": "downloaded_at DESC, id DESC",
     },
@@ -33,7 +33,8 @@ TABLES = {
         "required": ["source_url", "filename"],
         "order": "created_at DESC, id DESC",
     },
-    "podcast_subscriptions": {        "label": "Podcasts",
+    "podcast_subscriptions": {
+        "label": "Podcasts",
         "columns": ["id", "spotify_url", "author", "podcast_title", "feed_url", "created_at"],
         "editable": ["spotify_url", "author", "podcast_title", "feed_url"],
         "required": ["spotify_url", "author", "podcast_title"],
@@ -41,8 +42,8 @@ TABLES = {
     },
     "podcast_downloads": {
         "label": "Episodios descargados",
-        "columns": ["id", "episode_id", "spotify_url", "author", "podcast_title", "episode_title", "filename", "published_at", "downloaded_at", "synced_to_ipod", "synced_at"],
-        "editable": ["episode_id", "spotify_url", "author", "podcast_title", "episode_title", "filename", "published_at", "synced_to_ipod", "synced_at"],
+        "columns": ["id", "episode_id", "spotify_url", "author", "podcast_title", "episode_title", "filename", "published_at", "downloaded_at", "synced_to_ipod", "synced_at", "download_failed", "download_error", "no_retry"],
+        "editable": ["episode_id", "spotify_url", "author", "podcast_title", "episode_title", "filename", "published_at", "synced_to_ipod", "synced_at", "no_retry"],
         "required": ["episode_id", "spotify_url", "author", "podcast_title", "episode_title", "filename"],
         "order": "downloaded_at DESC, id DESC",
     },
@@ -75,7 +76,7 @@ def _get_row(table, row_id):
 
 def _normalize_value(column, values):
     value = values.get(column, [""])[0].strip()
-    if column == "synced_to_ipod":
+    if column in {"synced_to_ipod", "no_retry"}:
         return 1 if value in {"1", "true", "on", "yes"} else 0
     if value == "" and column in {"synced_at", "published_at", "feed_url", "playlist_title", "title"}:
         return None
@@ -298,7 +299,7 @@ class AdminHandler(BaseHTTPRequestHandler):
             required = " required" if column in meta["required"] else ""
             if column in {"title", "filename", "spotify_url", "feed_url", "episode_title", "playlist_url", "source_url"}:
                 control = f'<textarea name="{_esc(column)}"{required}>{_esc(value)}</textarea>'
-            elif column == "synced_to_ipod":
+            elif column in {"synced_to_ipod", "no_retry"}:
                 selected_0 = " selected" if str(value or "0") == "0" else ""
                 selected_1 = " selected" if str(value) == "1" else ""
                 control = f'<select name="synced_to_ipod"><option value="0"{selected_0}>No</option><option value="1"{selected_1}>Si</option></select>'
