@@ -28,14 +28,8 @@ def sync_pending(ipod_video_dir=None, ipod_podcast_dir=None):
     video_destination = Path(ipod_video_dir or config.IPOD_YOUTUBE_DIR)
     podcast_destination = Path(ipod_podcast_dir or config.IPOD_PODCAST_DIR)
 
-    if not video_destination.exists():
-        raise FileNotFoundError(
-            f"No existe el directorio del iPod: {video_destination}. Ajusta YTIPOD_IPOD_YOUTUBE_DIR."
-        )
-    if not podcast_destination.exists():
-        raise FileNotFoundError(
-            f"No existe el directorio del iPod: {podcast_destination}. Ajusta YTIPOD_IPOD_PODCAST_DIR."
-        )
+    video_destination.mkdir(parents=True, exist_ok=True)
+    podcast_destination.mkdir(parents=True, exist_ok=True)
 
     copied = 0
     for row in database.pending_sync_downloads():
