@@ -17,7 +17,7 @@ export YTIPOD_DATABASE=ytipod/ytipod.db
 export YTIPOD_DOWNLOAD_DIR=ytipod/downloads
 export YTIPOD_LOG_DIR=ytipod/logs
 export YTIPOD_TEMP_DIR=ytipod/tmp
-export YTIPOD_IPOD_VIDEO_DIR=/media/ipod/Videos
+export YTIPOD_IPOD_YOUTUBE_DIR=/media/ipod/Youtube
 export YTIPOD_IPOD_VIDEO_WIDTH=320
 export YTIPOD_IPOD_VIDEO_HEIGHT=240
 export YTIPOD_IPOD_VIDEO_FPS=25
@@ -29,7 +29,7 @@ export YTIPOD_TELEGRAM_ALLOWED_CHAT_ID=<TELEGRAM_CHAT_ID>
 
 Cada ejecucion crea un log nuevo en `logs/` con fecha y hora en el nombre, por ejemplo `scan_20260712_030000.log`.
 
-Los videos se guardan bajo `YTIPOD_DOWNLOAD_DIR/Videos/` y los podcasts bajo `YTIPOD_DOWNLOAD_DIR/Podcast/`. Al sincronizar, se copia preservando la estructura relativa hacia `YTIPOD_IPOD_MOUNT/Videos` y `YTIPOD_IPOD_MOUNT/Podcast`. Los videos destinados al iPod se guardan como `.mpg` con prefijo `YYMMDD-` segun la fecha de subida a YouTube, por ejemplo `240102-Titulo [id].mpg`, para conservar el orden al copiar al dispositivo.
+Los videos se guardan bajo `YTIPOD_DOWNLOAD_DIR/Youtube/` y los podcasts bajo `YTIPOD_DOWNLOAD_DIR/Podcast/`. Al sincronizar, se copia preservando la estructura relativa hacia `YTIPOD_IPOD_MOUNT/Youtube` y `YTIPOD_IPOD_MOUNT/Podcast`. Los videos destinados al iPod se guardan como `.mpg` con prefijo `YYMMDD-` segun la fecha de subida a YouTube, por ejemplo `240102-Titulo [id].mpg`, para conservar el orden al copiar al dispositivo.
 
 ## Uso
 
@@ -64,11 +64,6 @@ Copiar pendientes al iPod:
 venv/bin/python src/main.py sync-ipod
 ```
 
-Reorganizar una vez los archivos ya descargados al nuevo arbol `Videos/` y `Podcast/`:
-
-```bash
-venv/bin/python src/main.py reorganize-downloads
-```
 
 Bot de Telegram:
 

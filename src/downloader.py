@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 DOWNLOAD_DIR = Path(config.DOWNLOAD_DIR)
 DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
-VIDEO_DOWNLOAD_DIR = Path(config.VIDEOS_DIR)
+VIDEO_DOWNLOAD_DIR = Path(config.YOUTUBE_DIR)
 VIDEO_DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 YDL_OPTIONS = {

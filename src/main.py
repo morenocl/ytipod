@@ -1,9 +1,7 @@
 import argparse
 import logging
-import shutil
 from pathlib import Path
 
-import config
 import database
 import downloader
 import podcast_downloader
@@ -99,17 +97,6 @@ def _convert_video_metadata(source):
     return video_id, title, channel
 
 
-def _relocate_path(source, category):
-    source = Path(source)
-    try:
-        relative = source.relative_to(config.DOWNLOAD_DIR)
-    except ValueError:
-        return source
-    if relative.parts and relative.parts[0] == category:
-        return source
-    return Path(config.DOWNLOAD_DIR) / category / relative
-
-
 def cmd_convert_video(args):
     database.initialize()
     source = Path(args.path).expanduser()
@@ -120,40 +107,6 @@ def cmd_convert_video(args):
     filename = downloader.convert_video_for_sync(source)
     database.register(video_id, title, channel, filename)
     logger.info("Video reconvertido y listo para sync: %s", filename)
-
-
-def cmd_reorganize_downloads(_args):
-    database.initialize()
-    moved = 0
-    with database.connect() as conn:
-        for table, category in (("downloads", "Videos"), ("podcast_downloads", "Podcast")):
-            rows = conn.execute(
-                f"SELECT id, filename FROM {table} WHERE COALESCE(filename, '') != ''"
-            ).fetchall()
-            for row in rows:
-                source = Path(row["filename"])
-                target = _relocate_path(source, category)
-                if source == target:
-                    continue
-                if source.exists():
-                    target.parent.mkdir(parents=True, exist_ok=True)
-                    if target.exists():
-                        if target.is_file() and source.is_file() and target.read_bytes() == source.read_bytes():
-                            source.unlink(missing_ok=True)
-                        else:
-                            source.unlink(missing_ok=True)
-                    else:
-                        shutil.move(str(source), str(target))
-                elif not target.exists():
-                    logger.warning("No se encontro archivo para mover: %s", source)
-                    continue
-                conn.execute(
-                    f"UPDATE {table} SET filename = ? WHERE id = ?",
-                    (str(target), row["id"]),
-                )
-                moved += 1
-        conn.commit()
-    logger.info("Archivos reorganizados: %s", moved)
 
 
 def cmd_sync_ipod(_args):
@@ -208,9 +161,6 @@ def build_parser():
 
     sync = sub.add_parser("sync-ipod")
     sync.set_defaults(func=cmd_sync_ipod)
-
-    reorganize = sub.add_parser("reorganize-downloads")
-    reorganize.set_defaults(func=cmd_reorganize_downloads)
 
     web = sub.add_parser("web-admin")
     web.add_argument("--host", default=None, help="Host de escucha, por defecto YTIPOD_WEB_HOST o 127.0.0.1")

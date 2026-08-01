@@ -25,12 +25,12 @@ def _copy_preserving_structure(source, source_root, destination_root):
 
 def sync_pending(ipod_video_dir=None, ipod_podcast_dir=None):
     database.initialize()
-    video_destination = Path(ipod_video_dir or config.IPOD_VIDEO_DIR)
+    video_destination = Path(ipod_video_dir or config.IPOD_YOUTUBE_DIR)
     podcast_destination = Path(ipod_podcast_dir or config.IPOD_PODCAST_DIR)
 
     if not video_destination.exists():
         raise FileNotFoundError(
-            f"No existe el directorio del iPod: {video_destination}. Ajusta YTIPOD_IPOD_VIDEO_DIR."
+            f"No existe el directorio del iPod: {video_destination}. Ajusta YTIPOD_IPOD_YOUTUBE_DIR."
         )
     if not podcast_destination.exists():
         raise FileNotFoundError(
@@ -44,7 +44,7 @@ def sync_pending(ipod_video_dir=None, ipod_podcast_dir=None):
             logger.warning("Archivo no encontrado, queda pendiente: %s", source)
             continue
 
-        target = _copy_preserving_structure(source, config.VIDEOS_DIR, video_destination)
+        target = _copy_preserving_structure(source, config.YOUTUBE_DIR, video_destination)
         database.mark_synced(row["id"])
         if source.suffix.lower() == ".mpg":
             source.unlink(missing_ok=True)
