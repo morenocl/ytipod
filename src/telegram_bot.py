@@ -16,7 +16,7 @@ from logging_config import setup_logging
 
 logger = logging.getLogger(__name__)
 
-COMMANDS = {"/yt", "/tw", "/epub", "/ep-trafilatura"}
+COMMANDS = {"/yt", "/tw", "/epub", "/ep_trafilatura"}
 
 
 def _api(method, params=None):
@@ -89,7 +89,7 @@ def _register_commands():
                     {"command": "yt", "description": "Descargar video de YouTube"},
                     {"command": "tw", "description": "Descargar video desde un link"},
                     {"command": "epub", "description": "Generar EPUB con el extractor actual"},
-                    {"command": "ep-trafilatura", "description": "Generar EPUB con Trafilatura y Pandoc"},
+                    {"command": "ep_trafilatura", "description": "Generar EPUB con Trafilatura y Pandoc"},
                 ],
                 ensure_ascii=False,
             )
@@ -114,7 +114,7 @@ def _parse_command(text):
     parts = text.strip().split(maxsplit=1)
     if not parts:
         return None, ""
-    command = parts[0].split("@", 1)[0].lower()
+    command = parts[0].split("@", 1)[0].lower().replace("-", "_")
     if command not in COMMANDS:
         return None, text
     return command, parts[1] if len(parts) > 1 else ""
@@ -216,9 +216,9 @@ def handle_message(message):
         command, payload = _parse_command(text)
         if not command:
             if _extract_url(text):
-                _safe_send(chat_id, "Usa /yt para YouTube, /tw para videos de Twitter/X, /epub para articulos o /ep-trafilatura para articulos.")
+                _safe_send(chat_id, "Usa /yt para YouTube, /tw para videos de Twitter/X, /epub para articulos o /ep_trafilatura para articulos.")
             else:
-                _safe_send(chat_id, "Comandos disponibles: /yt, /tw, /epub, /ep-trafilatura")
+                _safe_send(chat_id, "Comandos disponibles: /yt, /tw, /epub, /ep_trafilatura")
             return
 
         if command == "/yt":
@@ -227,7 +227,7 @@ def handle_message(message):
             _handle_twitter_video(chat_id, payload)
         elif command == "/epub":
             _handle_epub(chat_id, payload)
-        elif command == "/ep-trafilatura":
+        elif command == "/ep_trafilatura":
             _handle_ep_trafilatura(chat_id, payload)
     except Exception as exc:
         logger.exception("Error procesando mensaje o comando")

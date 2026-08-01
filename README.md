@@ -83,10 +83,10 @@ Comandos del bot:
 /yt <link de YouTube>         Descarga el video y lo deja listo para sincronizar con el iPod.
 /tw <link con video>          Descarga el video y lo envia como archivo por Telegram.
 /epub <link de articulo>      Extrae el texto, genera un EPUB y lo envia por Telegram.
-/ep-trafilatura <link de articulo>  Usa Trafilatura + Pandoc para generar un EPUB y enviarlo por Telegram.
+/ep_trafilatura <link de articulo>  Usa Trafilatura + Pandoc para generar un EPUB y enviarlo por Telegram.
 ```
 
-Los EPUBs generados por `/epub` y `/ep-trafilatura` se conservan en `YTIPOD_DOWNLOAD_DIR/epubs/` y se registran en la tabla `epub_downloads` con fecha, URL original y path del archivo.
+Los EPUBs generados por `/epub` y `/ep_trafilatura` se conservan en `YTIPOD_DOWNLOAD_DIR/epubs/` y se registran en la tabla `epub_downloads` con fecha, URL original y path del archivo.
 
 Los links de YouTube solo se procesan si llegan precedidos por `/yt`.
 
