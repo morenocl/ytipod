@@ -2,11 +2,13 @@ import argparse
 import logging
 from pathlib import Path
 
+import config
 import database
 import downloader
 import podcast_downloader
 import scanner
 import sync_ipod
+import trafilatura_epub
 import web_admin
 from logging_config import setup_logging
 
@@ -109,6 +111,13 @@ def cmd_convert_video(args):
     logger.info("Video reconvertido y listo para sync: %s", filename)
 
 
+def cmd_ep_trafilatura(args):
+    database.initialize()
+    filename, title = trafilatura_epub.build_epub_from_url(args.url, Path(config.EPUB_DIR))
+    database.register_epub_download(args.url, filename, title)
+    logger.info("EPUB generado y guardado: %s", filename)
+
+
 def cmd_sync_ipod(_args):
     copied = sync_ipod.sync_pending()
     logger.info("Videos sincronizados: %s", copied)
@@ -158,6 +167,10 @@ def build_parser():
     convert = sub.add_parser("convert-video")
     convert.add_argument("path", help="Ruta al .mp4 a reconvertir")
     convert.set_defaults(func=cmd_convert_video)
+
+    ep_trafilatura = sub.add_parser("ep-trafilatura")
+    ep_trafilatura.add_argument("url", help="URL del articulo a convertir a EPUB")
+    ep_trafilatura.set_defaults(func=cmd_ep_trafilatura)
 
     sync = sub.add_parser("sync-ipod")
     sync.set_defaults(func=cmd_sync_ipod)

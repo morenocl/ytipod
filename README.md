@@ -58,6 +58,12 @@ Reconstruir manualmente un video local ya descargado a formato iPod y dejarlo pe
 venv/bin/python src/main.py convert-video /ruta/al/video.mp4
 ```
 
+Generar un EPUB con Trafilatura y Pandoc desde la linea de comandos:
+
+```bash
+venv/bin/python src/main.py ep-trafilatura 'https://www.421.news/es/lo-que-aprendi-leyendo-4chan-pol'
+```
+
 Copiar pendientes al iPod:
 
 ```bash
@@ -74,12 +80,13 @@ YTIPOD_TELEGRAM_TOKEN=... venv/bin/python src/telegram_bot.py
 Comandos del bot:
 
 ```text
-/yt <link de YouTube>       Descarga el video y lo deja listo para sincronizar con el iPod.
-/tw <link con video>        Descarga el video y lo envia como archivo por Telegram.
-/epub <link de articulo>    Extrae el texto, genera un EPUB y lo envia por Telegram.
+/yt <link de YouTube>         Descarga el video y lo deja listo para sincronizar con el iPod.
+/tw <link con video>          Descarga el video y lo envia como archivo por Telegram.
+/epub <link de articulo>      Extrae el texto, genera un EPUB y lo envia por Telegram.
+/ep-trafilatura <link de articulo>  Usa Trafilatura + Pandoc para generar un EPUB y enviarlo por Telegram.
 ```
 
-Los EPUBs generados por `/epub` se conservan en `YTIPOD_DOWNLOAD_DIR/epubs/` y se registran en la tabla `epub_downloads` con fecha, URL original y path del archivo.
+Los EPUBs generados por `/epub` y `/ep-trafilatura` se conservan en `YTIPOD_DOWNLOAD_DIR/epubs/` y se registran en la tabla `epub_downloads` con fecha, URL original y path del archivo.
 
 Los links de YouTube solo se procesan si llegan precedidos por `/yt`.
 
