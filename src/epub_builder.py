@@ -43,6 +43,7 @@ class ArticleParser(HTMLParser):
         self._jsonld_buffer = []
         self._skip_depth = 0
         self._stop_collecting = False
+        self._content_started = False
         self._author_scope_depth = 0
         self._scope_stack = []
         self._chunks = []
@@ -170,6 +171,8 @@ class ArticleParser(HTMLParser):
         if tag == "title":
             self._in_title = True
             return
+        if tag in {"article", "main", "h1"}:
+            self._content_started = True
         if tag == "meta":
             name = attr_map.get("name") or attr_map.get("property")
             content = attr_map.get("content")
@@ -185,6 +188,8 @@ class ArticleParser(HTMLParser):
                 self._in_script = True
             return
         if self._skip_depth or self._stop_collecting or self._in_script or self._capture_jsonld:
+            return
+        if not self._content_started:
             return
         if tag in _SKIP_TAGS:
             self._skip_depth += 1
