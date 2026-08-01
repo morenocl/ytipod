@@ -85,18 +85,8 @@ def build_epub_from_url(url, output_dir):
             include_images=True,
             include_links=True,
             include_formatting=True,
-            with_metadata=True,
+            with_metadata=False,
         )
-        if not extracted_html:
-            extracted_html = trafilatura.extract(
-                downloaded,
-                url=url,
-                output_format="html",
-                include_images=True,
-                include_links=True,
-                include_formatting=True,
-                with_metadata=False,
-            )
         if not extracted_html:
             raise RuntimeError("Trafilatura no pudo extraer contenido legible")
 
