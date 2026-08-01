@@ -17,6 +17,7 @@ from logging_config import setup_logging
 logger = logging.getLogger(__name__)
 
 COMMANDS = {"/yt", "/tw", "/epub", "/ep_trafilatura"}
+PENDING_ACTIONS = {}
 
 
 def _api(method, params=None):
@@ -102,6 +103,39 @@ def _allowed(chat_id):
     return not allowed or str(chat_id) == allowed
 
 
+def _set_pending(chat_id, command):
+    PENDING_ACTIONS[str(chat_id)] = command
+
+
+def _get_pending(chat_id):
+    return PENDING_ACTIONS.get(str(chat_id))
+
+
+def _clear_pending(chat_id):
+    PENDING_ACTIONS.pop(str(chat_id), None)
+
+
+def _handle_pending_input(chat_id, text):
+    command = _get_pending(chat_id)
+    if not command:
+        return False
+
+    if not _extract_url(text):
+        _safe_send(chat_id, "Pegame el link completo para continuar.")
+        return True
+
+    _clear_pending(chat_id)
+    if command == "/yt":
+        _handle_youtube(chat_id, text)
+    elif command == "/tw":
+        _handle_twitter_video(chat_id, text)
+    elif command == "/epub":
+        _handle_epub(chat_id, text)
+    elif command == "/ep_trafilatura":
+        _handle_ep_trafilatura(chat_id, text)
+    return True
+
+
 def _extract_url(text):
     for part in text.split():
         parsed = urlparse(part.strip())
@@ -123,7 +157,8 @@ def _parse_command(text):
 def _handle_youtube(chat_id, text):
     url = _extract_url(text)
     if not url or not downloader.is_youtube_url(url):
-        _send(chat_id, "Uso: /yt <link de YouTube>")
+        _safe_send(chat_id, "Uso: /yt <link de YouTube>")
+        _set_pending(chat_id, "/yt")
         return
 
     info = downloader.get_video_info(url)
@@ -164,7 +199,8 @@ def _handle_youtube(chat_id, text):
 def _handle_twitter_video(chat_id, text):
     url = _extract_url(text)
     if not url:
-        _send(chat_id, "Uso: /tw <link con video>")
+        _safe_send(chat_id, "Uso: /tw <link con video>")
+        _set_pending(chat_id, "/tw")
         return
 
     target_dir = Path(config.TEMP_DIR) / "telegram_tw"
@@ -178,7 +214,8 @@ def _handle_twitter_video(chat_id, text):
 def _handle_epub(chat_id, text):
     url = _extract_url(text)
     if not url:
-        _send(chat_id, "Uso: /epub <link de articulo>")
+        _safe_send(chat_id, "Uso: /epub <link de articulo>")
+        _set_pending(chat_id, "/epub")
         return
 
     target_dir = Path(config.EPUB_DIR)
@@ -193,7 +230,8 @@ def _handle_epub(chat_id, text):
 def _handle_ep_trafilatura(chat_id, text):
     url = _extract_url(text)
     if not url:
-        _send(chat_id, "Uso: /ep-trafilatura <link de articulo>")
+        _safe_send(chat_id, "Uso: /ep-trafilatura <link de articulo>")
+        _set_pending(chat_id, "/ep_trafilatura")
         return
 
     logger.info("Generando EPUB con trafilatura y pandoc: %s", url)
@@ -213,12 +251,25 @@ def handle_message(message):
             logger.warning("Mensaje ignorado de chat no autorizado: %s", chat_id)
             return
 
+        if _handle_pending_input(chat_id, text):
+            return
+
         command, payload = _parse_command(text)
         if not command:
             if _extract_url(text):
                 _safe_send(chat_id, "Usa /yt para YouTube, /tw para videos de Twitter/X, /epub para articulos o /ep_trafilatura para articulos.")
             else:
                 _safe_send(chat_id, "Comandos disponibles: /yt, /tw, /epub, /ep_trafilatura")
+            return
+
+        if not payload:
+            _set_pending(chat_id, command)
+            if command == "/yt":
+                _safe_send(chat_id, "Pegame el link de YouTube.")
+            elif command == "/tw":
+                _safe_send(chat_id, "Pegame el link del video.")
+            else:
+                _safe_send(chat_id, "Pegame el link del articulo.")
             return
 
         if command == "/yt":
