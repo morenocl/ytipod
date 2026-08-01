@@ -10,7 +10,7 @@ from pathlib import Path
 from urllib.parse import urljoin, urlparse
 from urllib.request import Request, urlopen
 
-from lxml import html as lxml_html
+from lxml import etree
 
 import config
 
@@ -67,7 +67,7 @@ def _slugify(value):
 def _resolve_image_url(attrs, base_url):
     attr_map = {key.lower(): value for key, value in attrs}
     candidate = None
-    for key in ("src", "data-src", "data-original", "data-lazy-src"):
+    for key in ("src", "data-src", "data-original", "data-lazy-src", "url", "href", "target"):
         if attr_map.get(key):
             candidate = attr_map[key]
             break
@@ -94,21 +94,32 @@ def _fetch_binary(url):
         return response.read(), response.headers.get_content_type()
 
 
-def _rewrite_images_for_epub(html_text, base_url, assets_dir):
+def _rewrite_images_for_epub(xml_text, base_url, assets_dir):
     assets_dir.mkdir(parents=True, exist_ok=True)
-    root = lxml_html.fromstring(html_text)
+    parser = etree.XMLParser(recover=True, remove_blank_text=False)
+    root = etree.fromstring(xml_text.encode("utf-8"), parser=parser)
     image_map = {}
     image_index = 0
 
-    for img in root.xpath("//img"):
-        image_url = _resolve_image_url(img.items(), base_url)
+    for element in root.iter():
+        if not isinstance(element.tag, str):
+            continue
+        local_name = etree.QName(element).localname
+        if local_name not in {"img", "graphic"}:
+            continue
+
+        image_url = _resolve_image_url(element.items(), base_url)
         if not image_url:
             continue
+
+        target_attr = "src" if local_name == "img" else "url"
         if image_url in image_map:
-            img.set("src", f"assets/{image_map[image_url]}")
-            for attr in ("srcset", "data-src", "data-original", "data-lazy-src"):
-                img.attrib.pop(attr, None)
+            element.set(target_attr, f"assets/{image_map[image_url]}")
+            for attr in ("src", "srcset", "data-src", "data-original", "data-lazy-src", "url", "href", "target"):
+                if attr != target_attr and attr in element.attrib:
+                    element.attrib.pop(attr, None)
             continue
+
         try:
             data, content_type = _fetch_binary(image_url)
             image_index += 1
@@ -116,13 +127,14 @@ def _rewrite_images_for_epub(html_text, base_url, assets_dir):
             filename = f"image-{image_index:02d}{ext}"
             (assets_dir / filename).write_bytes(data)
             image_map[image_url] = filename
-            img.set("src", f"assets/{filename}")
-            for attr in ("srcset", "data-src", "data-original", "data-lazy-src"):
-                img.attrib.pop(attr, None)
+            element.set(target_attr, f"assets/{filename}")
+            for attr in ("src", "srcset", "data-src", "data-original", "data-lazy-src", "url", "href", "target"):
+                if attr != target_attr and attr in element.attrib:
+                    element.attrib.pop(attr, None)
         except Exception:
             logger.exception("No se pudo descargar una imagen para el EPUB: %s", image_url)
 
-    return lxml_html.tostring(root, encoding="unicode", method="html")
+    return etree.tostring(root, encoding="unicode")
 
 
 def build_epub_from_url(url, output_dir):
@@ -136,7 +148,7 @@ def build_epub_from_url(url, output_dir):
 
     with tempfile.TemporaryDirectory(dir=Path(config.TEMP_DIR)) as temp_dir:
         temp_dir = Path(temp_dir)
-        html_path = temp_dir / "article.html"
+        xml_path = temp_dir / "article.tei.xml"
         epub_temp_path = temp_dir / "article.epub"
         assets_dir = temp_dir / "assets"
 
@@ -144,24 +156,25 @@ def build_epub_from_url(url, output_dir):
         if not downloaded:
             raise RuntimeError("Trafilatura no pudo descargar el articulo")
 
-        extracted_html = trafilatura.extract(
+        extracted_xml = trafilatura.extract(
             downloaded,
             url=url,
-            output_format="html",
+            output_format="xmltei",
             include_images=True,
             include_links=True,
             include_formatting=True,
             with_metadata=False,
         )
-        if not extracted_html:
+        if not extracted_xml:
             raise RuntimeError("Trafilatura no pudo extraer contenido legible")
 
-        html_filename = target_dir / f"{_slugify(urlparse(url).path.strip('/') or urlparse(url).hostname or 'articulo')}.html"
-        html_filename.write_text(extracted_html, encoding="utf-8")
+        base_name = _slugify(urlparse(url).path.strip("/") or urlparse(url).hostname or "articulo")
+        xml_filename = target_dir / f"{base_name}.tei.xml"
+        xml_filename.write_text(extracted_xml, encoding="utf-8")
 
-        rewritten_html = _rewrite_images_for_epub(extracted_html, url, assets_dir)
-        html_path.write_text(rewritten_html, encoding="utf-8")
-        title = _extract_html_title(rewritten_html)
+        rewritten_xml = _rewrite_images_for_epub(extracted_xml, url, assets_dir)
+        xml_path.write_text(rewritten_xml, encoding="utf-8")
+        title = _extract_html_title(rewritten_xml)
         if not title:
             parsed = urlparse(url)
             title = parsed.path.strip("/").split("/")[-1] or parsed.hostname or "articulo"
@@ -171,7 +184,7 @@ def build_epub_from_url(url, output_dir):
             filename.unlink()
 
         subprocess.run(
-            ["pandoc", str(html_path), "--resource-path", str(temp_dir), "-o", str(epub_temp_path)],
+            ["pandoc", "-f", "tei", str(xml_path), "--resource-path", str(temp_dir), "-o", str(epub_temp_path)],
             check=True,
         )
         epub_temp_path.replace(filename)
