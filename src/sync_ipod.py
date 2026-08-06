@@ -2,6 +2,7 @@ import logging
 import shutil
 from pathlib import Path
 
+import audio_metadata
 import config
 import database
 from logging_config import setup_logging
@@ -38,6 +39,7 @@ def sync_pending(ipod_video_dir=None, ipod_podcast_dir=None):
             logger.warning("Archivo no encontrado, queda pendiente: %s", source)
             continue
 
+        audio_metadata.set_podcast_genre(source)
         target = _copy_preserving_structure(source, config.YOUTUBE_DIR, video_destination)
         database.mark_synced(row["id"])
         if source.suffix.lower() == ".mpg":
@@ -51,6 +53,7 @@ def sync_pending(ipod_video_dir=None, ipod_podcast_dir=None):
             logger.warning("Archivo de podcast no encontrado, queda pendiente: %s", source)
             continue
 
+        audio_metadata.set_podcast_genre(source)
         target = _copy_preserving_structure(source, config.PODCAST_DIR, podcast_destination)
         database.mark_podcast_synced(row["id"])
         copied += 1

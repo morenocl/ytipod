@@ -21,7 +21,7 @@ def cmd_init_db(_args):
 
 
 def cmd_add_youtube_playlist(args):
-    database.add_youtube_playlist(args.playlist_url, args.title, args.since)
+    database.add_youtube_playlist(args.playlist_url, args.title, args.since, args.audio_only)
     logger.info("Playlist YouTube agregada: %s", args.title or args.playlist_url)
 
 
@@ -31,7 +31,8 @@ def cmd_list_youtube_playlists(_args):
         logger.info("No hay playlists de YouTube configuradas")
         return
     for row in rows:
-        logger.info("%s | %s", row["playlist_title"] or "sin titulo", row["playlist_url"])
+        mode = "mp3" if row["audio_only"] else "video"
+        logger.info("%s | %s | modo: %s", row["playlist_title"] or "sin titulo", row["playlist_url"], mode)
 
 
 def cmd_add_podcast(args):
@@ -138,6 +139,7 @@ def build_parser():
     add_playlist.add_argument("playlist_url", help="URL de la playlist de YouTube")
     add_playlist.add_argument("--title", default=None, help="Titulo opcional; si se omite se completa al escanear")
     add_playlist.add_argument("--since", default=None, help="Fecha minima YYYY-MM-DD para descargar contenido")
+    add_playlist.add_argument("--audio-only", action="store_true", help="Descargar solo el audio en MP3")
     add_playlist.set_defaults(func=cmd_add_youtube_playlist)
 
     list_playlists = sub.add_parser("list-youtube-playlists")

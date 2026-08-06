@@ -13,8 +13,8 @@ logger = logging.getLogger(__name__)
 TABLES = {
     "youtube_playlists": {
         "label": "Playlists de YouTube",
-        "columns": ["id", "playlist_url", "playlist_title", "cutoff_date", "created_at"],
-        "editable": ["playlist_url", "playlist_title", "cutoff_date"],
+        "columns": ["id", "playlist_url", "playlist_title", "cutoff_date", "audio_only", "created_at"],
+        "editable": ["playlist_url", "playlist_title", "cutoff_date", "audio_only"],
         "required": ["playlist_url", "cutoff_date"],
         "order": "playlist_title, playlist_url",
     },
@@ -76,7 +76,7 @@ def _get_row(table, row_id):
 
 def _normalize_value(column, values):
     value = values.get(column, [""])[0].strip()
-    if column in {"synced_to_ipod", "no_retry"}:
+    if column in {"synced_to_ipod", "no_retry", "audio_only"}:
         return 1 if value in {"1", "true", "on", "yes"} else 0
     if value == "" and column in {"synced_at", "published_at", "feed_url", "playlist_title", "title", "cutoff_date"}:
         return None
@@ -299,10 +299,13 @@ class AdminHandler(BaseHTTPRequestHandler):
             required = " required" if column in meta["required"] else ""
             if column in {"title", "filename", "spotify_url", "feed_url", "episode_title", "playlist_url", "source_url"}:
                 control = f'<textarea name="{_esc(column)}"{required}>{_esc(value)}</textarea>'
+            elif column == "audio_only":
+                checked = " checked" if str(value or "0") == "1" else ""
+                control = f'<input type="checkbox" name="audio_only" value="1"{checked}>'
             elif column in {"synced_to_ipod", "no_retry"}:
                 selected_0 = " selected" if str(value or "0") == "0" else ""
                 selected_1 = " selected" if str(value) == "1" else ""
-                control = f'<select name="synced_to_ipod"><option value="0"{selected_0}>No</option><option value="1"{selected_1}>Si</option></select>'
+                control = f'<select name="{_esc(column)}"><option value="0"{selected_0}>No</option><option value="1"{selected_1}>Si</option></select>'
             else:
                 control = f'<input name="{_esc(column)}" value="{_esc(value)}"{required}>'
             fields.append(f'<label><span>{_esc(column)}</span>{control}</label>')

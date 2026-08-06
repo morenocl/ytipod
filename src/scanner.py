@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime
+from pathlib import Path
 
 from yt_dlp import YoutubeDL
 
@@ -116,12 +117,14 @@ def scan_youtube_playlist(playlist):
 
         logger.info('Descargando desde playlist %s: "%s"', playlist_title, title)
         try:
+            audio_only = bool(playlist["audio_only"])
             source, video_info = downloader.download_video_raw(
                 folder_path,
                 video_url,
                 include_uploader_folder=False,
+                audio_only=audio_only,
             )
-            prepared.append((youtube_id, title, source, video_info))
+            prepared.append((youtube_id, title, source, video_info, audio_only))
         except Exception as exc:
             logger.exception("Fallo la descarga de playlist %s: %s", playlist_title, title)
             database.register_download_failure(
@@ -133,9 +136,9 @@ def scan_youtube_playlist(playlist):
             )
             continue
 
-    for youtube_id, title, source, video_info in prepared:
+    for youtube_id, title, source, video_info, audio_only in prepared:
         try:
-            filename = downloader.finalize_downloaded_video(source, video_info)
+            filename = Path(source) if audio_only else downloader.finalize_downloaded_video(source, video_info)
             database.register(
                 video_id=youtube_id,
                 channel=playlist_title,

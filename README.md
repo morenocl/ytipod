@@ -37,8 +37,11 @@ Agregar playlists de YouTube:
 
 ```bash
 venv/bin/python src/main.py add-youtube-playlist 'https://www.youtube.com/playlist?list=PLAYLIST_ID' --title 'Nombre opcional' --since '2026-08-01'
+venv/bin/python src/main.py add-youtube-playlist 'https://www.youtube.com/playlist?list=AUDIO_PLAYLIST_ID' --title 'Playlist de audio' --since '2026-08-01' --audio-only
 venv/bin/python src/main.py list-youtube-playlists
 ```
+
+Las playlists se descargan como video completo por defecto. Con `--audio-only` se descarga únicamente el audio y se convierte a MP3. El mismo valor se puede cambiar desde el campo `audio_only` de la tabla `youtube_playlists` en el panel web.
 
 Escanear y descargar videos nuevos de playlists y podcasts:
 
@@ -113,6 +116,8 @@ YTIPOD_DOWNLOAD_DIR/Podcast/Autora/Podcast/YYMMDD-Titulo.mp3
 ```
 
 Spotify no expone una descarga completa de episodios desde la URL `open.spotify.com/show/...`; por eso `feed_url` es necesario para descargar contenido. Si una suscripcion no tiene RSS, queda registrada pero el scan la omite con un warning.
+
+Los archivos MP3 de podcasts y de playlists de YouTube configuradas como audio se etiquetan con el genero ID3 `podcast` usando `mid3v2`. El comando debe estar instalado y disponible en `PATH` antes de ejecutar el scanner o la sincronizacion.
 
 ## Admin web
 

@@ -7,6 +7,7 @@ from urllib.parse import parse_qs, urlparse
 
 import yt_dlp
 
+import audio_metadata
 import config
 
 logger = logging.getLogger(__name__)
@@ -40,19 +41,36 @@ def is_youtube_url(url):
     return bool(parsed.hostname and ("youtube.com" in parsed.hostname or "youtu.be" in parsed.hostname))
 
 
-def _download_with_template(url, outtmpl):
+def _download_with_template(url, outtmpl, audio_only=False):
     options = {
         **YDL_OPTIONS,
         "outtmpl": str(outtmpl),
     }
+    if audio_only:
+        options.update(
+            {
+                "format": "bestaudio/best",
+                "postprocessors": [
+                    {
+                        "key": "FFmpegExtractAudio",
+                        "preferredcodec": "mp3",
+                        "preferredquality": "192",
+                    }
+                ],
+            }
+        )
 
     with yt_dlp.YoutubeDL(options) as ydl:
         info = ydl.extract_info(url, download=True)
         if not info:
             raise RuntimeError(f"yt-dlp no devolvio informacion para {url}")
         filename = Path(ydl.prepare_filename(info))
-        if filename.suffix != ".mp4":
+        if audio_only:
+            filename = filename.with_suffix(".mp3")
+        elif filename.suffix != ".mp4":
             filename = filename.with_suffix(".mp4")
+        if audio_only:
+            audio_metadata.set_podcast_genre(filename)
 
     return filename, info
 
@@ -138,14 +156,14 @@ def _convert_to_ipod_mpeg(source_file, target_file):
     return target
 
 
-def download_video_raw(folder_path, url, include_uploader_folder=True):
+def download_video_raw(folder_path, url, include_uploader_folder=True, audio_only=False):
     dirpath = VIDEO_DOWNLOAD_DIR / Path(folder_path)
     dirpath.mkdir(parents=True, exist_ok=True)
     if include_uploader_folder:
         outtmpl = dirpath / "%(uploader)s" / "%(title)s [%(id)s].%(ext)s"
     else:
         outtmpl = dirpath / "%(title)s [%(id)s].%(ext)s"
-    return _download_with_template(url, outtmpl)
+    return _download_with_template(url, outtmpl, audio_only=audio_only)
 
 
 def finalize_downloaded_video(source_file, info):

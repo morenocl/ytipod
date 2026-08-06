@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 from xml.etree import ElementTree as ET
 
+import audio_metadata
 import config
 import database
 
@@ -57,6 +58,7 @@ def _download_file(url, target):
     with urlopen(request, timeout=120) as response, tmp_target.open("wb") as output:
         shutil.copyfileobj(response, output)
     tmp_target.replace(target)
+    audio_metadata.set_podcast_genre(target)
 
 
 def _parse_feed(feed_url):

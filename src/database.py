@@ -23,6 +23,7 @@ def initialize():
                 playlist_url TEXT NOT NULL UNIQUE,
                 playlist_title TEXT,
                 cutoff_date TEXT NOT NULL,
+                audio_only INTEGER NOT NULL DEFAULT 0,
                 created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
             """
@@ -88,6 +89,7 @@ def initialize():
             )
             """
         )
+        _migrate_youtube_playlists(conn)
         _migrate_downloads(conn)
         _migrate_podcasts(conn)
         conn.commit()
@@ -95,6 +97,14 @@ def initialize():
 
 def _table_columns(conn, table):
     return {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+
+
+def _migrate_youtube_playlists(conn):
+    columns = _table_columns(conn, "youtube_playlists")
+    if "audio_only" not in columns:
+        conn.execute(
+            "ALTER TABLE youtube_playlists ADD COLUMN audio_only INTEGER NOT NULL DEFAULT 0"
+        )
 
 
 def _migrate_downloads(conn):
@@ -354,19 +364,20 @@ def mark_podcast_synced(download_id):
         conn.commit()
 
 
-def add_youtube_playlist(playlist_url, playlist_title=None, cutoff_date=None):
+def add_youtube_playlist(playlist_url, playlist_title=None, cutoff_date=None, audio_only=False):
     initialize()
     cutoff_date = normalize_date(cutoff_date)
     with connect() as conn:
         conn.execute(
             """
-            INSERT INTO youtube_playlists(playlist_url, playlist_title, cutoff_date)
-            VALUES(?, ?, ?)
+            INSERT INTO youtube_playlists(playlist_url, playlist_title, cutoff_date, audio_only)
+            VALUES(?, ?, ?, ?)
             ON CONFLICT(playlist_url) DO UPDATE SET
                 playlist_title = excluded.playlist_title,
-                cutoff_date = excluded.cutoff_date
+                cutoff_date = excluded.cutoff_date,
+                audio_only = excluded.audio_only
             """,
-            (playlist_url.strip(), (playlist_title or "").strip() or None, cutoff_date),
+            (playlist_url.strip(), (playlist_title or "").strip() or None, cutoff_date, int(bool(audio_only))),
         )
         conn.commit()
 
@@ -376,7 +387,7 @@ def get_youtube_playlists():
     with connect() as conn:
         return conn.execute(
             """
-            SELECT id, playlist_url, playlist_title, cutoff_date
+            SELECT id, playlist_url, playlist_title, cutoff_date, audio_only
             FROM youtube_playlists
             ORDER BY playlist_title, playlist_url
             """
