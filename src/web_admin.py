@@ -17,6 +17,7 @@ TABLES = {
         "editable": ["playlist_url", "playlist_title", "cutoff_date", "audio_only"],
         "required": ["playlist_url", "cutoff_date"],
         "order": "playlist_title, playlist_url",
+        "sortable": [],
     },
     "downloads": {
         "label": "Videos descargados",
@@ -24,6 +25,7 @@ TABLES = {
         "editable": ["youtube_id", "channel", "title", "filename", "synced_to_ipod", "synced_at", "no_retry"],
         "required": ["youtube_id", "channel", "title", "filename"],
         "order": "downloaded_at DESC, id DESC",
+        "sortable": ["channel", "title", "downloaded_at"],
     },
 
     "epub_downloads": {
@@ -39,6 +41,7 @@ TABLES = {
         "editable": ["spotify_url", "author", "podcast_title", "feed_url", "cutoff_date"],
         "required": ["spotify_url", "author", "podcast_title", "cutoff_date"],
         "order": "author, podcast_title",
+        "sortable": ["author", "podcast_title"],
     },
     "podcast_downloads": {
         "label": "Episodios descargados",
@@ -46,6 +49,7 @@ TABLES = {
         "editable": ["episode_id", "spotify_url", "author", "podcast_title", "episode_title", "filename", "published_at", "synced_to_ipod", "synced_at", "no_retry"],
         "required": ["episode_id", "spotify_url", "author", "podcast_title", "episode_title", "filename"],
         "order": "downloaded_at DESC, id DESC",
+        "sortable": ["author", "podcast_title", "episode_title", "downloaded_at"],
     },
 }
 
@@ -60,11 +64,16 @@ def _redirect(handler, location):
     handler.end_headers()
 
 
-def _get_rows(table):
+def _get_rows(table, sort_column=None, sort_direction="asc"):
     meta = TABLES[table]
     columns = ", ".join(meta["columns"])
+    if sort_column in meta.get("sortable", []):
+        direction = "DESC" if sort_direction == "desc" else "ASC"
+        order = f"LOWER(COALESCE({sort_column}, '')) {direction}, id {direction}"
+    else:
+        order = meta["order"]
     with database.connect() as conn:
-        return conn.execute(f"SELECT {columns} FROM {table} ORDER BY {meta['order']}").fetchall()
+        return conn.execute(f"SELECT {columns} FROM {table} ORDER BY {order}").fetchall()
 
 
 def _get_row(table, row_id):
@@ -116,6 +125,33 @@ def _delete_row(table, row_id):
     with database.connect() as conn:
         conn.execute(f"DELETE FROM {table} WHERE id = ?", (row_id,))
         conn.commit()
+
+
+def _toggle_synced_to_ipod(table, row_id, value):
+    if table not in {"downloads", "podcast_downloads"}:
+        raise ValueError("La tabla no admite modificar synced_to_ipod")
+    with database.connect() as conn:
+        conn.execute(
+            f"UPDATE {table} SET synced_to_ipod = ? WHERE id = ?",
+            (1 if value else 0, row_id),
+        )
+        conn.commit()
+
+
+def _render_table_cells(table, row, columns):
+    cells = []
+    for column in columns:
+        if column != "synced_to_ipod":
+            cells.append(f"<td>{_esc(row[column])}</td>")
+            continue
+        checked = " checked" if row[column] else ""
+        cells.append(
+            f'''<td><form class="quick-toggle" method="post" action="/?table={_esc(table)}&action=toggle-synced">
+              <input type="hidden" name="id" value="{_esc(row["id"])}">
+              <input type="checkbox" name="value" value="1"{checked} onchange="this.form.submit()" aria-label="Marcar como sincronizado">
+            </form></td>'''
+        )
+    return "".join(cells)
 
 
 class AdminHandler(BaseHTTPRequestHandler):
@@ -192,6 +228,9 @@ class AdminHandler(BaseHTTPRequestHandler):
     input, textarea, select {{ width: 100%; min-height: 38px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--text); font: inherit; }}
     textarea {{ min-height: 92px; resize: vertical; }}
     .actions {{ display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }}
+    .action-cell {{ vertical-align: top; }}
+    .quick-toggle {{ margin: 0; }}
+    .quick-toggle input[type="checkbox"] {{ width: auto; min-height: auto; padding: 0; }}
   </style>
 </head>
 <body>
@@ -218,7 +257,16 @@ class AdminHandler(BaseHTTPRequestHandler):
         elif action == "new":
             self._send_html(self._render_form(table))
         else:
-            self._send_html(self._render_table(table, params.get("error", [""])[0]))
+            sort_column = params.get("sort", [""])[0]
+            sort_direction = params.get("direction", ["asc"])[0]
+            self._send_html(
+                self._render_table(
+                    table,
+                    params.get("error", [""])[0],
+                    sort_column,
+                    sort_direction,
+                )
+            )
 
     def do_POST(self):
         if not self._authorized():
@@ -243,6 +291,12 @@ class AdminHandler(BaseHTTPRequestHandler):
                 _update_row(table, int(values["id"][0]), values)
             elif action == "delete":
                 _delete_row(table, int(values["id"][0]))
+            elif action == "toggle-synced":
+                _toggle_synced_to_ipod(
+                    table,
+                    int(values["id"][0]),
+                    values.get("value", ["0"])[-1] == "1",
+                )
             else:
                 self.send_error(HTTPStatus.BAD_REQUEST)
                 return
@@ -253,23 +307,32 @@ class AdminHandler(BaseHTTPRequestHandler):
 
         _redirect(self, f"/?table={table}")
 
-    def _render_table(self, table, error=""):
+    def _render_table(self, table, error="", sort_column=None, sort_direction="asc"):
         meta = TABLES[table]
-        rows = _get_rows(table)
+        rows = _get_rows(table, sort_column, sort_direction)
         error_html = f'<div class="error">{_esc(error)}</div>' if error else ""
-        header = "".join(f"<th>{_esc(column)}</th>" for column in meta["columns"])
+        header_parts = []
+        for column in meta["columns"]:
+            if column not in meta.get("sortable", []):
+                header_parts.append(f"<th>{_esc(column)}</th>")
+                continue
+            next_direction = "desc" if column == sort_column and sort_direction == "asc" else "asc"
+            marker = " &uarr;" if column == sort_column and sort_direction == "asc" else " &darr;" if column == sort_column else ""
+            href = f"/?{urlencode({'table': table, 'sort': column, 'direction': next_direction})}"
+            header_parts.append(f'<th><a href="{href}">{_esc(column)}{marker}</a></th>')
+        header = "".join(header_parts)
         body = []
         for row in rows:
-            cells = "".join(f"<td>{_esc(row[column])}</td>" for column in meta["columns"])
+            cells = _render_table_cells(table, row, meta["columns"])
             row_id = row["id"]
             edit_url = f"/?{urlencode({'table': table, 'action': 'edit', 'id': row_id})}"
-            actions = f'''<td class="actions">
+            actions = f'''<td class="action-cell"><div class="actions">
                 <a class="button" href="{edit_url}">Editar</a>
                 <form class="inline" method="post" action="/?table={_esc(table)}&action=delete" onsubmit="return confirm('Borrar fila #{row_id}?')">
                   <input type="hidden" name="id" value="{_esc(row_id)}">
                   <button class="button danger" type="submit">Borrar</button>
                 </form>
-              </td>'''
+              </div></td>'''
             body.append(f"<tr>{cells}{actions}</tr>")
         rows_html = "".join(body) or f'<tr><td colspan="{len(meta["columns"]) + 1}" class="muted">No hay filas.</td></tr>'
         new_url = f"/?{urlencode({'table': table, 'action': 'new'})}"
